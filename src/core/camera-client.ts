@@ -51,6 +51,7 @@ export class CameraClient {
 		this.startPolling()
 	}
 
+	/** Stops all network activity: closes WebSocket, clears poll/reconnect timers, resets state. */
 	stop(): void {
 		if (this.pollTimer) {
 			clearInterval(this.pollTimer)
@@ -175,8 +176,10 @@ export class CameraClient {
 			this.scheduleReconnect()
 		}
 
+		// Error handler for the WebSocket connection. We use the DOM-style .onerror
+		// property (not Node EventEmitter .on('error')) because we use the global
+		// WebSocket API which follows the browser WebSocket interface.
 		ws.onerror = (err: unknown) => {
-			// ErrorEvent objects don't stringify well — extract the message if available
 			const msg =
 				err instanceof Error
 					? err.message
@@ -187,6 +190,7 @@ export class CameraClient {
 		}
 	}
 
+	/** Exponential backoff: 1s, 2s, 4s, 8s, 16s, 32s, then capped at 30s */
 	private scheduleReconnect(): void {
 		if (!this.wsPath) return
 		if (this.reconnectTimer) return
