@@ -166,7 +166,6 @@ export class CameraClient {
 					const match = errMsg.match(/Cannot subscribe to unknown property '([^']+)'/)
 					if (match) {
 						this.subscribedProperties.delete(match[1])
-						this.onLog('debug', `Camera does not support subscription: ${match[1]}`)
 					} else {
 						this.onLog('warn', `WebSocket error response: ${errMsg}`)
 					}
