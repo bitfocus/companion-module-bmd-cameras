@@ -348,16 +348,18 @@ export async function probeAndFetchState(
 				return
 			}
 
-			if (!response.ok) return
+			if (!response.ok || response.status === 204) return
 
 			if (options.fetchState && options.onState) {
 				const contentType = response.headers.get('content-type') ?? ''
 				const value = contentType.includes('application/json') ? await response.json() : await response.text()
 				options.onState(ep.path, value)
 				loaded++
+			} else {
+				loaded++
 			}
-		} catch {
-			// Network errors — leave as supported, just no data
+		} catch (error: unknown) {
+			log('debug', `Fetch failed for ${ep.path}: ${error instanceof Error ? error.message : String(error)}`)
 		} finally {
 			clearTimeout(timeout)
 		}

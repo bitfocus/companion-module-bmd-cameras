@@ -13,6 +13,62 @@ import {
 	type SchemaProperty,
 } from './types.js'
 import { endpointOverrides } from './overrides.js'
+import type { StateStore } from './core/state-store.js'
+
+/**
+ * Find supported/available choices for an action property by looking up the store.
+ * Convention: for `/video/iso` with property `iso`, look for store values at
+ * paths like `/video/supportedISOs` that contain arrays.
+ */
+function findSupportedChoices(
+	store: StateStore,
+	endpointPath: string,
+	propertyKey: string,
+	endpoints: DiscoveredEndpoint[],
+): { id: string; label: string }[] | undefined {
+	// Build the base path: /video/iso -> /video
+	const basePath = endpointPath.substring(0, endpointPath.lastIndexOf('/'))
+
+	// Look for endpoints with "supported" in the path under the same base
+	for (const ep of endpoints) {
+		if (!ep.path.startsWith(basePath + '/')) continue
+		const lowerPath = ep.path.toLowerCase()
+		if (!lowerPath.includes('supported') && !lowerPath.includes('selectable')) continue
+
+		const storeValue = store.get(ep.path)
+		if (!storeValue || typeof storeValue !== 'object') continue
+
+		// Check each property in the stored value for an array that matches
+		for (const [key, val] of Object.entries(storeValue as Record<string, unknown>)) {
+			if (!Array.isArray(val) || val.length === 0) continue
+
+			// Match by key name similarity: supportedISOs -> iso, supportedGains -> gain
+			const lowerKey = key.toLowerCase()
+			const lowerProp = propertyKey.toLowerCase()
+			if (
+				lowerKey.includes(lowerProp) ||
+				lowerProp.includes(lowerKey.replace('supported', '').replace('selectable', ''))
+			) {
+				return val.map((v: unknown) => ({
+					id: String(v),
+					label: String(v),
+				}))
+			}
+		}
+
+		// If there's only one array property, use it as a fallback
+		const arrayProps = Object.entries(storeValue as Record<string, unknown>).filter(
+			([, v]) => Array.isArray(v) && (v as unknown[]).length > 0,
+		)
+		if (arrayProps.length === 1) {
+			return (arrayProps[0][1] as unknown[]).map((v: unknown) => ({
+				id: String(v),
+				label: String(v),
+			}))
+		}
+	}
+	return undefined
+}
 
 function cleanBooleanDescription(description: string): string {
 	return description
@@ -85,11 +141,27 @@ function schemaPropertyToField(
 function buildFieldsFromSchema(
 	schema: ParsedSchema | undefined,
 	overrides?: Record<string, { inputType?: string; label?: string }>,
+	dynamicChoices?: Record<string, { id: string; label: string }[]>,
 ): SomeCompanionActionInputField[] {
 	if (!schema?.properties) return []
 	const fields: SomeCompanionActionInputField[] = []
 	for (const [key, prop] of Object.entries(schema.properties)) {
-		fields.push(schemaPropertyToField(key, prop, overrides?.[key]))
+		const choices = dynamicChoices?.[key]
+		if (choices && choices.length > 0 && !prop.enum) {
+			// Use dynamic choices from "supported" endpoints instead of free-form input
+			const override = overrides?.[key]
+			const rawLabel = override?.label ?? prop.description ?? key
+			const label = prop.type === 'boolean' ? cleanBooleanDescription(rawLabel) : rawLabel
+			fields.push({
+				id: key,
+				type: 'dropdown',
+				label,
+				default: choices[0].id,
+				choices,
+			})
+		} else {
+			fields.push(schemaPropertyToField(key, prop, overrides?.[key]))
+		}
 	}
 	return fields
 }
@@ -122,7 +194,11 @@ function endpointToActionId(endpoint: DiscoveredEndpoint): string {
 	return endpoint.path.replace(/^\//, '').replace(/\//g, '_')
 }
 
-function buildActionForEndpoint(self: ModuleInstance, endpoint: DiscoveredEndpoint): CompanionActionDefinition {
+function buildActionForEndpoint(
+	self: ModuleInstance,
+	endpoint: DiscoveredEndpoint,
+	allEndpoints: DiscoveredEndpoint[],
+): CompanionActionDefinition {
 	const override = endpointOverrides[endpoint.path]
 	const mutationMethods: HttpMethod[] = endpoint.methods.filter((m: HttpMethod) => m !== 'GET')
 
@@ -130,8 +206,17 @@ function buildActionForEndpoint(self: ModuleInstance, endpoint: DiscoveredEndpoi
 	const primaryMethod = mutationMethods.includes('POST') ? 'POST' : mutationMethods[0]
 	const requestSchema = endpoint.requestSchemas?.[primaryMethod]
 
+	// Look up dynamic choices from "supported*" endpoints in the store
+	const dynamicChoices: Record<string, { id: string; label: string }[]> = {}
+	if (requestSchema?.properties) {
+		for (const key of Object.keys(requestSchema.properties)) {
+			const choices = findSupportedChoices(self.store, endpoint.path, key, allEndpoints)
+			if (choices) dynamicChoices[key] = choices
+		}
+	}
+
 	const fields: SomeCompanionActionInputField[] = []
-	fields.push(...buildFieldsFromSchema(requestSchema, override?.propertyOverrides))
+	fields.push(...buildFieldsFromSchema(requestSchema, override?.propertyOverrides, dynamicChoices))
 
 	// Use the mutation method's summary (e.g., "Set..." instead of "Get...")
 	const mutationSummary =
@@ -172,7 +257,7 @@ export function buildActions(self: ModuleInstance, endpoints: DiscoveredEndpoint
 		if (hasTemplateParams(endpoint.path)) continue
 
 		const id = endpointToActionId(endpoint)
-		definitions[id] = buildActionForEndpoint(self, endpoint)
+		definitions[id] = buildActionForEndpoint(self, endpoint, endpoints)
 	}
 	return definitions
 }

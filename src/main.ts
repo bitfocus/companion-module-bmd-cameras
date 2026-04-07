@@ -35,6 +35,11 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 		const feedbackIds = this.feedbackSubscriptions.getFeedbackIdsForProperty(property)
 		if (feedbackIds.length > 0) this.checkFeedbacksById(...feedbackIds)
 		updateVariableValues(this, this.activeEndpoints)
+
+		// Re-register actions when "supported" values change so dropdowns update
+		if (property.toLowerCase().includes('supported') || property.toLowerCase().includes('selectable')) {
+			this.setActionDefinitions(buildActions(this, this.activeEndpoints))
+		}
 	}
 
 	private setLastError(error: string): void {
@@ -101,11 +106,8 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 			// Register discovered endpoints immediately (before probing)
 			this.registerFromEndpoints(discovery.endpoints)
 
-			// Set WebSocket path and start the client
-			this.client.setWsPath(discovery.wsPath)
-			await this.client.start()
-
-			// Probe + fetch initial state in one pass (concurrency limited)
+			// Probe + fetch initial state BEFORE starting WS/polling to avoid
+			// competing with reconnect attempts for the camera's HTTP server
 			const log = (level: 'debug' | 'info' | 'warn' | 'error', message: string): void => this.log(level, message)
 			await probeAndFetchState(discovery.endpoints, this.config, log, {
 				probe: this.config.endpointHandling === 'probe',
@@ -116,6 +118,17 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 			// Re-register after probing to hide unsupported endpoints
 			if (this.config.endpointHandling === 'probe') {
 				this.registerFromEndpoints(discovery.endpoints)
+			}
+
+			// Now start WebSocket + polling (no competition with probe requests)
+			this.client.setWsPath(discovery.wsPath)
+			await this.client.start()
+
+			// Subscribe to all supported GET endpoints for real-time updates
+			for (const ep of discovery.endpoints) {
+				if (ep.methods.includes('GET') && !ep.unsupported && !ep.path.includes('{')) {
+					this.client.ensurePropertySubscription(ep.path)
+				}
 			}
 
 			this.updateStatus(InstanceStatus.Ok)
