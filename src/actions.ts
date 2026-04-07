@@ -103,7 +103,7 @@ function endpointToActionId(endpoint: DiscoveredEndpoint): string {
 
 function buildActionForEndpoint(self: ModuleInstance, endpoint: DiscoveredEndpoint): CompanionActionDefinition {
 	const override = endpointOverrides[endpoint.path]
-	const mutationMethods = endpoint.methods.filter((m) => m !== 'GET')
+	const mutationMethods: HttpMethod[] = endpoint.methods.filter((m) => m !== 'GET')
 
 	const fields: SomeCompanionActionInputField[] = []
 
