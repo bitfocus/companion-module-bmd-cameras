@@ -270,7 +270,22 @@ export class CameraClient {
 				signal: controller.signal,
 			})
 
-			if (response.status === 204) return { ok: true }
+			if (response.status === 204) return undefined
+
+			if (response.status === 409) {
+				const contentType409 = response.headers.get('content-type') || ''
+				if (contentType409.includes('application/json')) {
+					const errorData = (await response.json()) as {
+						error?: string
+						details?: { field?: string; message?: string }[]
+					}
+					const details = Array.isArray(errorData.details)
+						? errorData.details.map((d: { field?: string; message?: string }) => `${d.field}: ${d.message}`).join('; ')
+						: ''
+					throw new Error(`409 Conflict: ${errorData.error ?? 'Conflict'}${details ? ` (${details})` : ''}`)
+				}
+			}
+
 			if (!response.ok) {
 				const bodyText = await response.text()
 				throw new Error(`HTTP ${response.status}: ${bodyText}`)
