@@ -189,6 +189,11 @@ function collectSchemaLeaves(schema: ParsedSchema, prefix?: string): { fieldId: 
 	return leaves
 }
 
+// Type coercion logic here is intentionally not shared with buildSingleFieldAction.
+// This function coerces from Companion's typed form values (numbers are already numbers,
+// booleans already booleans). buildSingleFieldAction coerces from a raw textinput string
+// where 'true'/'1' must be parsed. The semantics are different enough that a shared
+// helper would add coupling without clarity.
 function buildBodyFromOptions(
 	schema: ParsedSchema | undefined,
 	options: Record<string, unknown>,

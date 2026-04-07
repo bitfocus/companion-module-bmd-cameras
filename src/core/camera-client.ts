@@ -2,6 +2,9 @@ import { API_BASE_PATH } from '../constants.js'
 import type { ModuleConfig } from '../config.js'
 import { errorMessage, type HttpMethod } from '../types.js'
 
+// Minimal WebSocket interface matching the DOM WebSocket API.
+// Named RawWs (not WebSocketLike) to avoid confusion with Node's ws library —
+// we use the global browser-style WebSocket, not a Node EventEmitter.
 type RawWs = {
 	send: (data: string) => void
 	close: () => void
@@ -69,6 +72,9 @@ export class CameraClient {
 		this.reconnectAttempt = 0
 	}
 
+	// protocol() and wsProtocol() are kept separate rather than unified because
+	// they return different type pairs (http/https vs ws/wss). A combined helper
+	// would make call sites less readable for no real DRY gain.
 	private protocol(): 'http' | 'https' {
 		return this.config.useHttps ? 'https' : 'http'
 	}
@@ -190,7 +196,10 @@ export class CameraClient {
 		}
 	}
 
-	/** Exponential backoff: 1s, 2s, 4s, 8s, 16s, 32s, then capped at 30s */
+	// Exponential backoff: 1s, 2s, 4s, 8s, 16s, then capped at 30s.
+	// Intentionally retries indefinitely — cameras on live sets can go offline
+	// for hours (power cycle, network reconfiguration) and should reconnect
+	// automatically. Giving up would require manual re-enable in Companion.
 	private scheduleReconnect(): void {
 		if (!this.wsPath) return
 		if (this.reconnectTimer) return
