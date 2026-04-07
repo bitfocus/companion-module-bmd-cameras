@@ -133,8 +133,10 @@ export class CameraClient {
 		ws.onmessage = (message: { data: string }) => {
 			try {
 				const data = JSON.parse(message.data)
+				this.onLog('debug', `WS message: ${JSON.stringify(data).slice(0, 200)}`)
 				const action = data?.data?.action
 				if (action === 'propertyValueChanged' && typeof data?.data?.property === 'string') {
+					this.onLog('debug', `WS property update: ${data.data.property}`)
 					this.onState(data.data.property, data.data.value, 'ws')
 				}
 			} catch (error) {
@@ -143,9 +145,14 @@ export class CameraClient {
 		}
 
 		ws.onclose = () => {
+			this.onLog('debug', 'WebSocket closed')
 			this.wsConnected = false
 			this.ws = undefined
 			this.scheduleReconnect()
+		}
+
+		ws.onerror = (err: unknown) => {
+			this.onLog('warn', `WebSocket error: ${err instanceof Error ? err.message : String(err)}`)
 		}
 	}
 
@@ -189,6 +196,7 @@ export class CameraClient {
 
 	private sendSubscribe(property: string): void {
 		if (!this.ws || !this.wsConnected) return
+		this.onLog('debug', `WS subscribing to: ${property}`)
 		this.ws.send(
 			JSON.stringify({
 				type: 'request',
