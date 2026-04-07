@@ -127,28 +127,65 @@ function buildFieldsFromSchema(
 	schema: ParsedSchema | undefined,
 	overrides?: Record<string, { inputType?: string; label?: string }>,
 	dynamicChoices?: Record<string, { id: string; label: string }[]>,
+	prefix?: string,
 ): SomeCompanionActionInputField[] {
 	if (!schema?.properties) return []
 	const fields: SomeCompanionActionInputField[] = []
 	for (const [key, prop] of Object.entries(schema.properties)) {
-		const choices = dynamicChoices?.[key]
+		const fieldId = prefix ? `${prefix}.${key}` : key
+
+		// Recurse into nested objects
+		if ((prop.type === 'object' || prop.properties) && prop.properties) {
+			const nestedSchema: ParsedSchema = { type: 'object', properties: prop.properties, required: prop.required }
+			fields.push(...buildFieldsFromSchema(nestedSchema, overrides, dynamicChoices, fieldId))
+			continue
+		}
+
+		const choices = dynamicChoices?.[fieldId]
 		if (choices && choices.length > 0 && !prop.enum) {
-			// Use dynamic choices from "supported" endpoints instead of free-form input
-			const override = overrides?.[key]
+			const override = overrides?.[fieldId]
 			const rawLabel = override?.label ?? prop.description ?? key
 			const label = prop.type === 'boolean' ? cleanBooleanDescription(rawLabel) : rawLabel
 			fields.push({
-				id: key,
+				id: fieldId,
 				type: 'dropdown',
 				label,
 				default: choices[0].id,
 				choices,
 			})
 		} else {
-			fields.push(schemaPropertyToField(key, prop, overrides?.[key]))
+			fields.push(schemaPropertyToField(fieldId, prop, overrides?.[fieldId]))
 		}
 	}
 	return fields
+}
+
+function setNestedValue(obj: Record<string, unknown>, path: string, value: unknown): void {
+	const parts = path.split('.')
+	let current = obj
+	for (let i = 0; i < parts.length - 1; i++) {
+		if (!(parts[i] in current) || typeof current[parts[i]] !== 'object') {
+			current[parts[i]] = {}
+		}
+		current = current[parts[i]] as Record<string, unknown>
+	}
+	current[parts[parts.length - 1]] = value
+}
+
+function collectSchemaLeaves(schema: ParsedSchema, prefix?: string): { fieldId: string; prop: SchemaProperty }[] {
+	const leaves: { fieldId: string; prop: SchemaProperty }[] = []
+	if (!schema.properties) return leaves
+	for (const [key, prop] of Object.entries(schema.properties)) {
+		const fieldId = prefix ? `${prefix}.${key}` : key
+		if ((prop.type === 'object' || prop.properties) && prop.properties) {
+			leaves.push(
+				...collectSchemaLeaves({ type: 'object', properties: prop.properties, required: prop.required }, fieldId),
+			)
+		} else {
+			leaves.push({ fieldId, prop })
+		}
+	}
+	return leaves
 }
 
 function buildBodyFromOptions(
@@ -158,18 +195,23 @@ function buildBodyFromOptions(
 	if (!schema?.properties) return undefined
 	const body: Record<string, unknown> = {}
 	let hasValue = false
-	for (const [key, prop] of Object.entries(schema.properties)) {
-		const value = options[key]
+
+	for (const { fieldId, prop } of collectSchemaLeaves(schema)) {
+		const value = options[fieldId]
 		if (value === undefined || value === '') continue
+
+		let coerced: unknown
 		if (prop.type === 'number' || prop.type === 'integer') {
 			const num = Number(value)
 			if (Number.isNaN(num)) continue
-			body[key] = num
+			coerced = num
 		} else if (prop.type === 'boolean') {
-			body[key] = Boolean(value)
+			coerced = Boolean(value)
 		} else {
-			body[key] = value
+			coerced = value
 		}
+
+		setNestedValue(body, fieldId, coerced)
 		hasValue = true
 	}
 	return hasValue ? body : undefined
