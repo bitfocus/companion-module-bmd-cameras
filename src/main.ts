@@ -153,6 +153,11 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 			this.actionRefreshTimer = undefined
 		}
 		if (this.client) {
+			// client.stop() handles all resource cleanup internally:
+			// - clearInterval on pollTimer
+			// - clearTimeout on reconnectTimer
+			// - ws.close() on the WebSocket connection
+			// - resets wsConnected and reconnectAttempt state
 			this.client.stop()
 		}
 		this.store.clear()
