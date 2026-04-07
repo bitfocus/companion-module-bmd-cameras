@@ -133,11 +133,36 @@ export class CameraClient {
 		ws.onmessage = (message: { data: string }) => {
 			try {
 				const data = JSON.parse(message.data)
-				this.onLog('debug', `WS message: ${JSON.stringify(data).slice(0, 200)}`)
-				const action = data?.data?.action
-				if (action === 'propertyValueChanged' && typeof data?.data?.property === 'string') {
-					this.onLog('debug', `WS property update: ${data.data.property}`)
-					this.onState(data.data.property, data.data.value, 'ws')
+				const type = data?.type as string | undefined
+				const payload = data?.data as Record<string, unknown> | undefined
+				if (!payload) return
+
+				if (type === 'event' && payload.action === 'propertyValueChanged' && typeof payload.property === 'string') {
+					this.onState(payload.property, payload.value, 'ws')
+					return
+				}
+
+				if (type === 'response' && payload.action === 'subscribe' && payload.success === true) {
+					// Subscribe responses include current values — store them
+					const values = payload.values as Record<string, unknown> | undefined
+					if (values) {
+						for (const [prop, val] of Object.entries(values)) {
+							this.onState(prop, val, 'ws')
+						}
+					}
+					return
+				}
+
+				if (type === 'response' && payload.success === false) {
+					const errMsg = (payload.errorMessage as string) ?? 'unknown error'
+					// Unsubscribe properties the camera doesn't support
+					const match = errMsg.match(/Cannot subscribe to unknown property '([^']+)'/)
+					if (match) {
+						this.subscribedProperties.delete(match[1])
+						this.onLog('debug', `Camera does not support subscription: ${match[1]}`)
+					} else {
+						this.onLog('warn', `WebSocket error response: ${errMsg}`)
+					}
 				}
 			} catch (error) {
 				this.onLog('warn', `WebSocket parse error: ${error instanceof Error ? error.message : String(error)}`)
@@ -145,7 +170,6 @@ export class CameraClient {
 		}
 
 		ws.onclose = () => {
-			this.onLog('debug', 'WebSocket closed')
 			this.wsConnected = false
 			this.ws = undefined
 			this.scheduleReconnect()
@@ -196,7 +220,6 @@ export class CameraClient {
 
 	private sendSubscribe(property: string): void {
 		if (!this.ws || !this.wsConnected) return
-		this.onLog('debug', `WS subscribing to: ${property}`)
 		this.ws.send(
 			JSON.stringify({
 				type: 'request',
