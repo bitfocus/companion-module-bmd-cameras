@@ -19,6 +19,7 @@ import type { StateStore } from './core/state-store.js'
  * Find supported/available choices for an action property by looking up the store.
  * Convention: for `/video/iso` with property `iso`, look for store values at
  * paths like `/video/supportedISOs` that contain arrays.
+ * Matching is strict: the "supported" endpoint path must contain the property name.
  */
 function findSupportedChoices(
 	store: StateStore,
@@ -26,42 +27,26 @@ function findSupportedChoices(
 	propertyKey: string,
 	endpoints: DiscoveredEndpoint[],
 ): { id: string; label: string }[] | undefined {
-	// Build the base path: /video/iso -> /video
 	const basePath = endpointPath.substring(0, endpointPath.lastIndexOf('/'))
+	const lowerProp = propertyKey.toLowerCase()
 
-	// Look for endpoints with "supported" in the path under the same base
 	for (const ep of endpoints) {
 		if (!ep.path.startsWith(basePath + '/')) continue
 		const lowerPath = ep.path.toLowerCase()
 		if (!lowerPath.includes('supported') && !lowerPath.includes('selectable')) continue
 
+		// The endpoint path itself must reference the property name
+		// e.g., /video/supportedISOs matches property "iso"
+		const pathSuffix = lowerPath.slice(basePath.length + 1)
+		if (!pathSuffix.includes(lowerProp)) continue
+
 		const storeValue = store.get(ep.path)
 		if (!storeValue || typeof storeValue !== 'object') continue
 
-		// Check each property in the stored value for an array that matches
-		for (const [key, val] of Object.entries(storeValue as Record<string, unknown>)) {
+		// Find the first array in the response
+		for (const [, val] of Object.entries(storeValue as Record<string, unknown>)) {
 			if (!Array.isArray(val) || val.length === 0) continue
-
-			// Match by key name similarity: supportedISOs -> iso, supportedGains -> gain
-			const lowerKey = key.toLowerCase()
-			const lowerProp = propertyKey.toLowerCase()
-			if (
-				lowerKey.includes(lowerProp) ||
-				lowerProp.includes(lowerKey.replace('supported', '').replace('selectable', ''))
-			) {
-				return val.map((v: unknown) => ({
-					id: String(v),
-					label: String(v),
-				}))
-			}
-		}
-
-		// If there's only one array property, use it as a fallback
-		const arrayProps = Object.entries(storeValue as Record<string, unknown>).filter(
-			([, v]) => Array.isArray(v) && (v as unknown[]).length > 0,
-		)
-		if (arrayProps.length === 1) {
-			return (arrayProps[0][1] as unknown[]).map((v: unknown) => ({
+			return val.map((v: unknown) => ({
 				id: String(v),
 				label: String(v),
 			}))
