@@ -311,7 +311,8 @@ async function readMergeWrite(
 		}
 
 		const result = await self.client.request(method, endpoint.path, body)
-		self.store.set(endpoint.path, result, 'rest')
+		// If camera returned updated state (200), store it. Otherwise keep the body we sent.
+		self.store.set(endpoint.path, result ?? body, 'rest')
 	})
 }
 
@@ -343,7 +344,9 @@ function buildFullAction(
 					await readMergeWrite(self, endpoint, method, body)
 				} else {
 					const result = await self.client.request(method, endpoint.path, body)
-					self.store.set(endpoint.path, result, 'rest')
+					if (result !== undefined) {
+						self.store.set(endpoint.path, result, 'rest')
+					}
 				}
 			} catch (error) {
 				self.log('error', `Action '${endpoint.path}' failed: ${error instanceof Error ? error.message : String(error)}`)
