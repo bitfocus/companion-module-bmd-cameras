@@ -1,17 +1,17 @@
 {
 	"$schema": "../node_modules/@companion-module/base/assets/manifest.schema.json",
-	"id": "your-module-name",
-	"name": "your-module-name",
-	"shortname": "module-shortname",
-	"description": "A short one line description of your module",
+	"id": "bmd-cameras",
+	"name": "companion-module-bmd-cameras",
+	"shortname": "bmd-cameras",
+	"description": "Control and monitor Blackmagic cameras over REST and WebSocket APIs",
 	"version": "0.0.0",
 	"license": "MIT",
-	"repository": "git+https://github.com/bitfocus/companion-module-your-module-name.git",
-	"bugs": "https://github.com/bitfocus/companion-module-your-module-name/issues",
+	"repository": "git+https://github.com/bitfocus/companion-module-bmd-cameras.git",
+	"bugs": "https://github.com/bitfocus/companion-module-bmd-cameras/issues",
 	"maintainers": [
 		{
-			"name": "Your name",
-			"email": "Your email"
+			"name": "Companion Contributors",
+			"email": "commits@bitfocus.io"
 		}
 	],
 	"runtime": {
@@ -21,7 +21,8 @@
 		"entrypoint": "../dist/main.js"
 	},
 	"legacyIds": [],
-	"manufacturer": "Your company",
-	"products": ["Your product"],
-	"keywords": []
+	"type": "connection",
+	"manufacturer": "Blackmagic Design",
+	"products": ["Blackmagic Cameras API"],
+	"keywords": ["camera", "blackmagic", "rest", "control", "broadcast", "pyxis", "ursa", "cine", "micro", "studio"]
 }
