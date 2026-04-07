@@ -133,7 +133,10 @@ function buildActionForEndpoint(self: ModuleInstance, endpoint: DiscoveredEndpoi
 	const fields: SomeCompanionActionInputField[] = []
 	fields.push(...buildFieldsFromSchema(requestSchema, override?.propertyOverrides))
 
-	const actionName = override?.label ?? endpoint.summary
+	// Use the mutation method's summary (e.g., "Set..." instead of "Get...")
+	const mutationSummary =
+		endpoint.methodSummaries?.[primaryMethod] ?? endpoint.methodSummaries?.PUT ?? endpoint.methodSummaries?.POST
+	const actionName = override?.label ?? mutationSummary ?? endpoint.summary
 	const actionDescription = override?.description ?? endpoint.path
 
 	return {

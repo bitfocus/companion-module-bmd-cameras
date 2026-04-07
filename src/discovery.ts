@@ -170,6 +170,7 @@ function parseOpenApiSpec(yamlText: string): { endpoints: DiscoveredEndpoint[]; 
 
 	for (const [path, methods] of Object.entries(spec.paths)) {
 		const endpointMethods: HttpMethod[] = []
+		const methodSummaries: Partial<Record<HttpMethod, string>> = {}
 		let summary = ''
 		let description: string | undefined
 		let deprecated = false
@@ -181,6 +182,10 @@ function parseOpenApiSpec(yamlText: string): { endpoints: DiscoveredEndpoint[]; 
 			if (!['GET', 'PUT', 'POST', 'DELETE'].includes(upperMethod)) continue
 
 			endpointMethods.push(upperMethod)
+
+			if (operation.summary) {
+				methodSummaries[upperMethod] = operation.summary
+			}
 
 			if (upperMethod === 'GET' || !summary) {
 				summary = operation.summary ?? ''
@@ -208,6 +213,7 @@ function parseOpenApiSpec(yamlText: string): { endpoints: DiscoveredEndpoint[]; 
 			domain,
 			methods: endpointMethods,
 			summary: summary || path,
+			methodSummaries,
 			description,
 			deprecated,
 			responseSchema,
