@@ -6,6 +6,7 @@ import type {
 } from '@companion-module/base'
 import type { ModuleInstance } from './main.js'
 import {
+	errorMessage,
 	hasTemplateParams,
 	type DiscoveredEndpoint,
 	type HttpMethod,
@@ -349,7 +350,7 @@ function buildFullAction(
 					}
 				}
 			} catch (error) {
-				self.log('error', `Action '${endpoint.path}' failed: ${error instanceof Error ? error.message : String(error)}`)
+				self.log('error', `Action '${endpoint.path}' failed: ${errorMessage(error)}`)
 			}
 		},
 	}
@@ -359,7 +360,8 @@ function buildFullAction(
 function buildSingleFieldAction(self: ModuleInstance, endpoint: DiscoveredEndpoint): CompanionActionDefinition {
 	const method = getMutationMethod(endpoint)
 	const requestSchema = endpoint.requestSchemas?.[method]
-	const leaves = collectSchemaLeaves(requestSchema!)
+	if (!requestSchema) return { name: getMutationName(endpoint, method), options: [], callback: async () => {} }
+	const leaves = collectSchemaLeaves(requestSchema)
 
 	const fieldChoices = leaves.map((leaf: { fieldId: string; prop: SchemaProperty }) => ({
 		id: leaf.fieldId,
@@ -407,7 +409,7 @@ function buildSingleFieldAction(self: ModuleInstance, endpoint: DiscoveredEndpoi
 				setNestedValue(body, fieldId, coerced)
 				await readMergeWrite(self, endpoint, method, body)
 			} catch (error) {
-				self.log('error', `Action '${endpoint.path}' failed: ${error instanceof Error ? error.message : String(error)}`)
+				self.log('error', `Action '${endpoint.path}' failed: ${errorMessage(error)}`)
 			}
 		},
 	}

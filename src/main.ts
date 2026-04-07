@@ -8,7 +8,7 @@ import { CameraClient } from './core/camera-client.js'
 import { FeedbackSubscriptions } from './core/feedback-subscriptions.js'
 import { StateStore } from './core/state-store.js'
 import { discoverCamera, probeAndFetchState } from './discovery.js'
-import type { DiscoveredEndpoint, DiscoveryResult, StateUpdateEvent } from './types.js'
+import { errorMessage, type DiscoveredEndpoint, type DiscoveryResult, type StateUpdateEvent } from './types.js'
 
 export class ModuleInstance extends InstanceBase<ModuleConfig> {
 	config!: ModuleConfig
@@ -140,7 +140,7 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 			this.updateStatus(InstanceStatus.Ok)
 			this.setConnectionState('connected')
 		} catch (error) {
-			const message = error instanceof Error ? error.message : String(error)
+			const message = errorMessage(error)
 			this.setLastError(message)
 			this.updateStatus(InstanceStatus.ConnectionFailure, message)
 			this.setConnectionState('error')
