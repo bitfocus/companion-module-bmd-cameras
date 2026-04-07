@@ -64,6 +64,11 @@ export interface StateUpdateEvent {
 	source: 'rest' | 'ws' | 'poll'
 }
 
+/** Returns true if an endpoint path contains template parameters like {deviceName} */
+export function hasTemplateParams(path: string): boolean {
+	return path.includes('{')
+}
+
 export type ActionDefinitionMap = Record<string, CompanionActionDefinition>
 export type FeedbackDefinitionMap = Record<string, CompanionFeedbackDefinition>
 export type ActionInputField = SomeCompanionActionInputField

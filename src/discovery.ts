@@ -66,19 +66,13 @@ function parseDocumentationHtml(html: string): { openApiYamls: string[]; asyncAp
 	const asyncApiSection = asyncApiSectionIndex >= 0 ? html.slice(asyncApiSectionIndex) : ''
 
 	const hrefRegex = /href="([^"]+\.yaml)"/g
-	let match: RegExpExecArray | null
 
-	match = hrefRegex.exec(openApiSection)
-	while (match !== null) {
+	for (const match of openApiSection.matchAll(hrefRegex)) {
 		openApiYamls.push(match[1])
-		match = hrefRegex.exec(openApiSection)
 	}
 
-	hrefRegex.lastIndex = 0
-	match = hrefRegex.exec(asyncApiSection)
-	while (match !== null) {
+	for (const match of asyncApiSection.matchAll(hrefRegex)) {
 		asyncApiYamls.push(match[1])
-		match = hrefRegex.exec(asyncApiSection)
 	}
 
 	return { openApiYamls, asyncApiYamls }
@@ -248,7 +242,7 @@ export async function discoverCamera(config: ModuleConfig, log: LogFn): Promise<
 	const yamlFiles: string[] = []
 
 	const openApiResults = await Promise.allSettled(
-		openApiYamls.map(async (yamlPath) => {
+		openApiYamls.map(async (yamlPath: string) => {
 			const url = `${baseUrl}/control/${yamlPath}`
 			yamlFiles.push(yamlPath)
 			const text = await fetchText(url, config.requestTimeoutMs)
@@ -286,71 +280,89 @@ export async function discoverCamera(config: ModuleConfig, log: LogFn): Promise<
 	return { endpoints: allEndpoints, wsPath, yamlFiles }
 }
 
-export async function probeEndpoints(endpoints: DiscoveredEndpoint[], config: ModuleConfig, log: LogFn): Promise<void> {
-	const baseUrl = getBaseUrl(config)
+/** Run async tasks with a concurrency limit */
+async function runWithConcurrency<T>(tasks: (() => Promise<T>)[], limit: number): Promise<PromiseSettledResult<T>[]> {
+	const results: PromiseSettledResult<T>[] = new Array(tasks.length)
+	let nextIndex = 0
 
-	await Promise.allSettled(
-		endpoints
-			.filter((ep) => ep.methods.includes('GET'))
-			.map(async (ep) => {
-				const url = `${baseUrl}${API_BASE_PATH}${ep.path}`
-				const controller = new AbortController()
-				const timeout = setTimeout(() => controller.abort(), config.requestTimeoutMs)
-				try {
-					const response = await fetch(url, {
-						method: 'GET',
-						headers: { Accept: 'application/json' },
-						signal: controller.signal,
-					})
-					if (response.status === 501) {
-						ep.unsupported = true
-						log('debug', `Endpoint ${ep.path} returned 501 (not implemented)`)
-					}
-				} catch {
-					// Network errors during probing are not 501s, leave as supported
-				} finally {
-					clearTimeout(timeout)
-				}
-			}),
-	)
-
-	const unsupportedCount = endpoints.filter((ep) => ep.unsupported).length
-	if (unsupportedCount > 0) {
-		log('info', `Probing complete: ${unsupportedCount} endpoints returned 501`)
+	async function worker(): Promise<void> {
+		while (nextIndex < tasks.length) {
+			const index = nextIndex++
+			try {
+				results[index] = { status: 'fulfilled', value: await tasks[index]() }
+			} catch (reason) {
+				results[index] = { status: 'rejected', reason }
+			}
+		}
 	}
+
+	await Promise.all(Array.from({ length: Math.min(limit, tasks.length) }, async () => worker()))
+	return results
 }
 
-export async function fetchInitialState(
+const CONCURRENCY_LIMIT = 5
+
+/**
+ * Probes endpoints and optionally fetches initial state in one pass.
+ * Skips template-path endpoints. Uses concurrency limiting to avoid overwhelming the camera.
+ */
+export async function probeAndFetchState(
 	endpoints: DiscoveredEndpoint[],
 	config: ModuleConfig,
 	log: LogFn,
-	onState: (property: string, value: unknown) => void,
+	options: {
+		probe: boolean
+		fetchState: boolean
+		onState?: (property: string, value: unknown) => void
+	},
 ): Promise<void> {
 	const baseUrl = getBaseUrl(config)
-
-	const getEndpoints = endpoints.filter((ep) => ep.methods.includes('GET') && !ep.unsupported)
-
-	const results = await Promise.allSettled(
-		getEndpoints.map(async (ep) => {
-			const url = `${baseUrl}${API_BASE_PATH}${ep.path}`
-			const controller = new AbortController()
-			const timeout = setTimeout(() => controller.abort(), config.requestTimeoutMs)
-			try {
-				const response = await fetch(url, {
-					method: 'GET',
-					headers: { Accept: 'application/json' },
-					signal: controller.signal,
-				})
-				if (!response.ok) return
-				const contentType = response.headers.get('content-type') ?? ''
-				const value = contentType.includes('application/json') ? await response.json() : await response.text()
-				onState(ep.path, value)
-			} finally {
-				clearTimeout(timeout)
-			}
-		}),
+	const getEndpoints = endpoints.filter(
+		(ep: DiscoveredEndpoint) => ep.methods.includes('GET') && !ep.path.includes('{'),
 	)
 
-	const succeeded = results.filter((r) => r.status === 'fulfilled').length
-	log('info', `Initial state fetch: ${succeeded}/${getEndpoints.length} endpoints loaded`)
+	let loaded = 0
+	let unsupported = 0
+
+	const tasks = getEndpoints.map((ep: DiscoveredEndpoint) => async () => {
+		const url = `${baseUrl}${API_BASE_PATH}${ep.path}`
+		const controller = new AbortController()
+		const timeout = setTimeout(() => controller.abort(), config.requestTimeoutMs)
+		try {
+			const response = await fetch(url, {
+				method: 'GET',
+				headers: { Accept: 'application/json' },
+				signal: controller.signal,
+			})
+
+			if (response.status === 501) {
+				ep.unsupported = true
+				unsupported++
+				log('debug', `Endpoint ${ep.path} returned 501 (not implemented)`)
+				return
+			}
+
+			if (!response.ok) return
+
+			if (options.fetchState && options.onState) {
+				const contentType = response.headers.get('content-type') ?? ''
+				const value = contentType.includes('application/json') ? await response.json() : await response.text()
+				options.onState(ep.path, value)
+				loaded++
+			}
+		} catch {
+			// Network errors — leave as supported, just no data
+		} finally {
+			clearTimeout(timeout)
+		}
+	})
+
+	await runWithConcurrency(tasks, CONCURRENCY_LIMIT)
+
+	if (unsupported > 0) {
+		log('info', `Probing: ${unsupported} endpoints returned 501`)
+	}
+	if (options.fetchState) {
+		log('info', `Initial state: ${loaded}/${getEndpoints.length - unsupported} endpoints loaded`)
+	}
 }

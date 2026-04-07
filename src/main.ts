@@ -7,7 +7,7 @@ import { buildFeedbacks } from './feedbacks.js'
 import { CameraClient } from './core/camera-client.js'
 import { FeedbackSubscriptions } from './core/feedback-subscriptions.js'
 import { StateStore } from './core/state-store.js'
-import { discoverCamera, probeEndpoints, fetchInitialState } from './discovery.js'
+import { discoverCamera, probeAndFetchState } from './discovery.js'
 import type { DiscoveredEndpoint, DiscoveryResult, StateUpdateEvent } from './types.js'
 
 export class ModuleInstance extends InstanceBase<ModuleConfig> {
@@ -69,11 +69,6 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 			// Product endpoint may not exist
 		}
 
-		// Probe for 501s if configured
-		if (this.config.endpointHandling === 'probe') {
-			await probeEndpoints(result.endpoints, this.config, log)
-		}
-
 		this.cachedDiscovery = result
 		return result
 	}
@@ -83,8 +78,9 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 
 		this.client = new CameraClient({
 			config: this.config,
-			onLog: (level, message) => this.log(level, message),
-			onState: (property, value, source) => this.store.set(property, value, source),
+			onLog: (level: 'debug' | 'info' | 'warn' | 'error', message: string) => this.log(level, message),
+			onState: (property: string, value: unknown, source: 'rest' | 'ws' | 'poll') =>
+				this.store.set(property, value, source),
 		})
 
 		// Register empty definitions initially
@@ -93,25 +89,33 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 		this.updateStatus(InstanceStatus.Connecting)
 		this.setConnectionState('connecting')
 
+		// Run discovery in background to avoid Companion init timeout
+		void this.connectAndDiscover()
+	}
+
+	private async connectAndDiscover(): Promise<void> {
 		try {
 			// Discover the camera's API
 			const discovery = await this.runDiscovery()
+
+			// Register discovered endpoints immediately (before probing)
+			this.registerFromEndpoints(discovery.endpoints)
 
 			// Set WebSocket path and start the client
 			this.client.setWsPath(discovery.wsPath)
 			await this.client.start()
 
-			// Register all discovered endpoints
-			this.registerFromEndpoints(discovery.endpoints)
+			// Probe + fetch initial state in one pass (concurrency limited)
+			const log = (level: 'debug' | 'info' | 'warn' | 'error', message: string): void => this.log(level, message)
+			await probeAndFetchState(discovery.endpoints, this.config, log, {
+				probe: this.config.endpointHandling === 'probe',
+				fetchState: this.config.fetchMode === 'eager',
+				onState: (property: string, value: unknown) => this.store.set(property, value, 'rest'),
+			})
 
-			// Fetch initial state (eager mode)
-			if (this.config.fetchMode === 'eager') {
-				await fetchInitialState(
-					discovery.endpoints,
-					this.config,
-					(level, message) => this.log(level, message),
-					(property, value) => this.store.set(property, value, 'rest'),
-				)
+			// Re-register after probing to hide unsupported endpoints
+			if (this.config.endpointHandling === 'probe') {
+				this.registerFromEndpoints(discovery.endpoints)
 			}
 
 			this.updateStatus(InstanceStatus.Ok)
@@ -137,48 +141,19 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 	async configUpdated(config: ModuleConfig): Promise<void> {
 		this.config = NormalizeConfig(config)
 		this.client.updateConfig(this.config)
+		this.client.stop()
 		this.store.clear()
 
 		this.setConnectionState('reconnecting')
 		this.updateStatus(InstanceStatus.Connecting)
 
-		try {
-			// If we have a cached discovery, use it immediately while re-discovering in background
-			if (this.cachedDiscovery) {
-				this.registerFromEndpoints(this.cachedDiscovery.endpoints)
-				this.client.setWsPath(this.cachedDiscovery.wsPath)
-				await this.client.start()
-			}
-
-			// Re-discover (updates cache)
-			const discovery = await this.runDiscovery()
-			this.client.setWsPath(discovery.wsPath)
-
-			// If specs changed, re-register and restart client
-			if (!this.cachedDiscovery || discovery.endpoints.length !== this.cachedDiscovery.endpoints.length) {
-				this.client.stop()
-				await this.client.start()
-			}
-
-			this.registerFromEndpoints(discovery.endpoints)
-
-			if (this.config.fetchMode === 'eager') {
-				await fetchInitialState(
-					discovery.endpoints,
-					this.config,
-					(level, message) => this.log(level, message),
-					(property, value) => this.store.set(property, value, 'rest'),
-				)
-			}
-
-			this.updateStatus(InstanceStatus.Ok)
-			this.setConnectionState('connected')
-		} catch (error) {
-			const message = error instanceof Error ? error.message : String(error)
-			this.setLastError(message)
-			this.updateStatus(InstanceStatus.ConnectionFailure, message)
-			this.setConnectionState('error')
+		// If we have cached specs, re-register immediately for fast UX
+		if (this.cachedDiscovery) {
+			this.registerFromEndpoints(this.cachedDiscovery.endpoints)
 		}
+
+		// Run full discovery in background
+		void this.connectAndDiscover()
 	}
 
 	getConfigFields(): SomeCompanionConfigField[] {
