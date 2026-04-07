@@ -34,6 +34,8 @@ export interface DiscoveredEndpoint {
 	domain: string
 	methods: HttpMethod[]
 	summary: string
+	/** Per-method summaries from the OpenAPI spec */
+	methodSummaries?: Partial<Record<HttpMethod, string>>
 	description?: string
 	deprecated?: boolean
 	/** OpenAPI schema for GET response */
