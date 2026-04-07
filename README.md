@@ -18,7 +18,7 @@ This module takes a **dynamic discovery** approach — instead of hardcoding end
 
 ### Why Dynamic Discovery
 
-- **Zero maintenance** when Blackmagic releases firmware with new endpoints
+- **Hopefully Low maintenance** when Blackmagic releases firmware with new endpoints
 - **Works across camera models** automatically — each camera declares what it supports
 - **Single source of truth** — the camera's own specs, not our code
 - **Unsupported features hidden** — endpoints returning 501/404 are probed and removed
