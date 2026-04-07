@@ -23,6 +23,8 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 	private cachedDiscovery: DiscoveryResult | undefined
 	/** Currently active endpoints (after discovery + probing) */
 	private activeEndpoints: DiscoveredEndpoint[] = []
+	/** Debounce timer for action re-registration */
+	private actionRefreshTimer: NodeJS.Timeout | undefined
 
 	constructor(internal: unknown) {
 		super(internal)
@@ -36,9 +38,13 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 		if (feedbackIds.length > 0) this.checkFeedbacksById(...feedbackIds)
 		updateVariableValues(this, this.activeEndpoints)
 
-		// Re-register actions when "supported" values change so dropdowns update
+		// Debounced re-registration when "supported" values change so dropdowns update
 		if (property.toLowerCase().includes('supported') || property.toLowerCase().includes('selectable')) {
-			this.setActionDefinitions(buildActions(this, this.activeEndpoints))
+			if (this.actionRefreshTimer) clearTimeout(this.actionRefreshTimer)
+			this.actionRefreshTimer = setTimeout(() => {
+				this.actionRefreshTimer = undefined
+				this.setActionDefinitions(buildActions(this, this.activeEndpoints))
+			}, 500)
 		}
 	}
 
@@ -142,6 +148,10 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 	}
 
 	async destroy(): Promise<void> {
+		if (this.actionRefreshTimer) {
+			clearTimeout(this.actionRefreshTimer)
+			this.actionRefreshTimer = undefined
+		}
 		if (this.client) {
 			this.client.stop()
 		}
