@@ -7,6 +7,26 @@ function endpointToVariablePrefix(endpoint: DiscoveredEndpoint): string {
 	return endpoint.path.replace(/^\//, '').replace(/\//g, '_')
 }
 
+/**
+ * Build a variable ID for a response property, avoiding redundancy.
+ * e.g., path "/video/iso" + property "iso" → "video_iso" (not "video_iso_iso")
+ * e.g., path "/system/product" + property "productName" → "system_product_productName"
+ */
+function buildVariableId(prefix: string, key: string): string {
+	// If the prefix already ends with the property name (case-insensitive), skip it
+	const lowerPrefix = prefix.toLowerCase()
+	const lowerKey = key.toLowerCase()
+	if (lowerPrefix.endsWith(`_${lowerKey}`) || lowerPrefix === lowerKey) {
+		return prefix
+	}
+	// Also handle the last segment matching: "transports_0_record" + "recording" → skip since "record" ≈ "recording"
+	const lastSegment = lowerPrefix.split('_').pop() ?? ''
+	if (lastSegment.length >= 3 && lowerKey.startsWith(lastSegment)) {
+		return prefix
+	}
+	return `${prefix}_${key}`
+}
+
 function toStringValue(input: unknown): string {
 	if (input === undefined || input === null) return ''
 	if (typeof input === 'string') return input
@@ -48,7 +68,7 @@ export function buildVariableDefinitions(endpoints: DiscoveredEndpoint[]): Compa
 		if (endpoint.responseSchema?.properties) {
 			for (const [key, prop] of Object.entries(endpoint.responseSchema.properties)) {
 				definitions.push({
-					variableId: `${prefix}_${key}`,
+					variableId: buildVariableId(prefix, key),
 					name: `${override?.label ?? domainLabel}: ${prop.description ?? key}`,
 				})
 			}
@@ -80,7 +100,7 @@ export function updateVariableValues(self: ModuleInstance, endpoints: Discovered
 
 		if (endpoint.responseSchema?.properties) {
 			for (const key of Object.keys(endpoint.responseSchema.properties)) {
-				values[`${prefix}_${key}`] = toStringValue(getPathValue(storeValue, key))
+				values[buildVariableId(prefix, key)] = toStringValue(getPathValue(storeValue, key))
 			}
 		} else {
 			values[prefix] = toStringValue(storeValue)
