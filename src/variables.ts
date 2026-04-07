@@ -1,6 +1,6 @@
 import type { CompanionVariableDefinition, CompanionVariableValues } from '@companion-module/base'
 import type { ModuleInstance } from './main.js'
-import { hasTemplateParams, type DiscoveredEndpoint } from './types.js'
+import { hasTemplateParams, type DiscoveredEndpoint, type SchemaProperty } from './types.js'
 import { endpointOverrides } from './overrides.js'
 
 function endpointToVariablePrefix(endpoint: DiscoveredEndpoint): string {
@@ -49,6 +49,55 @@ function getPathValue(obj: unknown, fieldPath: string): unknown {
 	return current
 }
 
+function isObjectSchema(prop: SchemaProperty): boolean {
+	return prop.type === 'object' || prop.properties !== undefined
+}
+
+function addPropertyDefinitions(
+	definitions: CompanionVariableDefinition[],
+	varId: string,
+	label: string,
+	prop: SchemaProperty,
+): void {
+	if (isObjectSchema(prop)) {
+		definitions.push({ variableId: `${varId}_json`, name: `${label} (JSON)` })
+		if (prop.properties) {
+			for (const [subKey, subProp] of Object.entries(prop.properties)) {
+				definitions.push({
+					variableId: `${varId}_${subKey}`,
+					name: `${label}: ${subProp.description ?? subKey}`,
+				})
+			}
+		}
+	} else {
+		definitions.push({ variableId: varId, name: label })
+	}
+}
+
+function setPropertyValues(
+	values: CompanionVariableValues,
+	varId: string,
+	prop: SchemaProperty,
+	rawValue: unknown,
+): void {
+	if (isObjectSchema(prop)) {
+		values[`${varId}_json`] = toStringValue(rawValue)
+		if (rawValue && typeof rawValue === 'object') {
+			for (const subKey of Object.keys(prop.properties ?? {})) {
+				values[`${varId}_${subKey}`] = toStringValue((rawValue as Record<string, unknown>)[subKey])
+			}
+		}
+		// Also expand runtime properties not in schema
+		if (rawValue && typeof rawValue === 'object' && !prop.properties) {
+			for (const [subKey, subVal] of Object.entries(rawValue as Record<string, unknown>)) {
+				values[`${varId}_${subKey}`] = toStringValue(subVal)
+			}
+		}
+	} else {
+		values[varId] = toStringValue(rawValue)
+	}
+}
+
 export function buildVariableDefinitions(endpoints: DiscoveredEndpoint[]): CompanionVariableDefinition[] {
 	const definitions: CompanionVariableDefinition[] = [
 		{ variableId: 'connection_state', name: 'Connection state' },
@@ -67,10 +116,9 @@ export function buildVariableDefinitions(endpoints: DiscoveredEndpoint[]): Compa
 
 		if (endpoint.responseSchema?.properties) {
 			for (const [key, prop] of Object.entries(endpoint.responseSchema.properties)) {
-				definitions.push({
-					variableId: buildVariableId(prefix, key),
-					name: `${override?.label ?? domainLabel}: ${prop.description ?? key}`,
-				})
+				const varId = buildVariableId(prefix, key)
+				const label = `${override?.label ?? domainLabel}: ${prop.description ?? key}`
+				addPropertyDefinitions(definitions, varId, label, prop)
 			}
 		} else {
 			definitions.push({
@@ -99,8 +147,9 @@ export function updateVariableValues(self: ModuleInstance, endpoints: Discovered
 		const storeValue = self.store.get(endpoint.path)
 
 		if (endpoint.responseSchema?.properties) {
-			for (const key of Object.keys(endpoint.responseSchema.properties)) {
-				values[buildVariableId(prefix, key)] = toStringValue(getPathValue(storeValue, key))
+			for (const [key, prop] of Object.entries(endpoint.responseSchema.properties)) {
+				const varId = buildVariableId(prefix, key)
+				setPropertyValues(values, varId, prop, getPathValue(storeValue, key))
 			}
 		} else {
 			values[prefix] = toStringValue(storeValue)
