@@ -71,6 +71,11 @@ export function hasTemplateParams(path: string): boolean {
 	return path.includes('{')
 }
 
+/** Extract a readable error message from an unknown thrown value */
+export function errorMessage(error: unknown): string {
+	return error instanceof Error ? error.message : String(error)
+}
+
 export type ActionDefinitionMap = Record<string, CompanionActionDefinition>
 export type FeedbackDefinitionMap = Record<string, CompanionFeedbackDefinition>
 export type ActionInputField = SomeCompanionActionInputField

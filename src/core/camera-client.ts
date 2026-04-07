@@ -1,6 +1,6 @@
 import { API_BASE_PATH } from '../constants.js'
 import type { ModuleConfig } from '../config.js'
-import type { HttpMethod } from '../types.js'
+import { errorMessage, type HttpMethod } from '../types.js'
 
 type RawWs = {
 	send: (data: string) => void
@@ -165,7 +165,7 @@ export class CameraClient {
 					}
 				}
 			} catch (error) {
-				this.onLog('warn', `WebSocket parse error: ${error instanceof Error ? error.message : String(error)}`)
+				this.onLog('warn', `WebSocket parse error: ${errorMessage(error)}`)
 			}
 		}
 
@@ -216,43 +216,28 @@ export class CameraClient {
 				const value = await this.request('GET', property)
 				this.onState(property, value, 'poll')
 			} catch (error) {
-				this.onLog('debug', `Polling failed for ${property}: ${error instanceof Error ? error.message : String(error)}`)
+				this.onLog('debug', `Polling failed for ${property}: ${errorMessage(error)}`)
 			}
 		}
 	}
 
 	private refreshWebSocketSubscriptions(): void {
-		for (const property of this.subscribedProperties) this.sendSubscribe(property)
+		for (const property of this.subscribedProperties) this.sendWsAction('subscribe', [property])
 	}
 
-	private sendSubscribe(property: string): void {
+	private sendWsAction(action: 'subscribe' | 'unsubscribe', properties: string[]): void {
 		if (!this.ws || !this.wsConnected) return
-		this.ws.send(
-			JSON.stringify({
-				type: 'request',
-				data: { action: 'subscribe', properties: [property] },
-			}),
-		)
-	}
-
-	private sendUnsubscribe(property: string): void {
-		if (!this.ws || !this.wsConnected) return
-		this.ws.send(
-			JSON.stringify({
-				type: 'request',
-				data: { action: 'unsubscribe', properties: [property] },
-			}),
-		)
+		this.ws.send(JSON.stringify({ type: 'request', data: { action, properties } }))
 	}
 
 	ensurePropertySubscription(property: string): void {
 		this.subscribedProperties.add(property)
-		this.sendSubscribe(property)
+		this.sendWsAction('subscribe', [property])
 	}
 
 	removePropertySubscription(property: string): void {
 		this.subscribedProperties.delete(property)
-		this.sendUnsubscribe(property)
+		this.sendWsAction('unsubscribe', [property])
 	}
 
 	async request(method: HttpMethod, path: string, body?: unknown): Promise<unknown> {

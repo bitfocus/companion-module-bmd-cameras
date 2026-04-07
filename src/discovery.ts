@@ -1,7 +1,14 @@
 import { parse as parseYaml } from 'yaml'
 import { API_BASE_PATH, DOCUMENTATION_PATH } from './constants.js'
 import type { ModuleConfig } from './config.js'
-import type { DiscoveredEndpoint, DiscoveryResult, HttpMethod, ParsedSchema, SchemaProperty } from './types.js'
+import {
+	errorMessage,
+	type DiscoveredEndpoint,
+	type DiscoveryResult,
+	type HttpMethod,
+	type ParsedSchema,
+	type SchemaProperty,
+} from './types.js'
 
 interface OpenApiSpec {
 	info?: { title?: string }
@@ -277,7 +284,7 @@ export async function discoverCamera(config: ModuleConfig, log: LogFn): Promise<
 				break
 			}
 		} catch (error) {
-			log('warn', `Failed to fetch AsyncAPI ${yamlPath}: ${error instanceof Error ? error.message : String(error)}`)
+			log('warn', `Failed to fetch AsyncAPI ${yamlPath}: ${errorMessage(error)}`)
 		}
 	}
 
@@ -359,7 +366,7 @@ export async function probeAndFetchState(
 				loaded++
 			}
 		} catch (error: unknown) {
-			log('debug', `Fetch failed for ${ep.path}: ${error instanceof Error ? error.message : String(error)}`)
+			log('debug', `Fetch failed for ${ep.path}: ${errorMessage(error)}`)
 		} finally {
 			clearTimeout(timeout)
 		}
