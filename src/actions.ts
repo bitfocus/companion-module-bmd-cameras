@@ -5,15 +5,34 @@ import type {
 	SomeCompanionActionInputField,
 } from '@companion-module/base'
 import type { ModuleInstance } from './main.js'
-import type { DiscoveredEndpoint, HttpMethod, ParsedSchema, SchemaProperty } from './types.js'
+import {
+	hasTemplateParams,
+	type DiscoveredEndpoint,
+	type HttpMethod,
+	type ParsedSchema,
+	type SchemaProperty,
+} from './types.js'
 import { endpointOverrides } from './overrides.js'
+
+function cleanBooleanDescription(description: string): string {
+	return description
+		.replace(/^When true,\s*/i, '')
+		.replace(/^If true,\s*/i, '')
+		.replace(/^Indicates if\s*/i, '')
+		.replace(/^Indicates whether\s*/i, '')
+		.replace(/^True when\s*/i, '')
+		.replace(/^Enable or disable\s*/i, '')
+		.replace(/^\w/, (c: string) => c.toUpperCase())
+}
 
 function schemaPropertyToField(
 	key: string,
 	prop: SchemaProperty,
 	override?: { inputType?: string; label?: string },
 ): SomeCompanionActionInputField {
-	const label = override?.label ?? prop.description ?? key
+	const isBooleanField = prop.type === 'boolean' || override?.inputType === 'toggle'
+	const rawLabel = override?.label ?? prop.description ?? key
+	const label = isBooleanField ? cleanBooleanDescription(rawLabel) : rawLabel
 	const inputType = override?.inputType
 
 	if (inputType === 'toggle' || (prop.type === 'boolean' && inputType !== 'dropdown')) {
@@ -35,7 +54,7 @@ function schemaPropertyToField(
 			type: 'dropdown',
 			label,
 			default: defaultEnum,
-			choices: prop.enum.map((value) => ({ id: value, label: value })),
+			choices: prop.enum.map((value: string) => ({ id: value, label: value })),
 		}
 	}
 
@@ -86,7 +105,9 @@ function buildBodyFromOptions(
 		const value = options[key]
 		if (value === undefined || value === '') continue
 		if (prop.type === 'number' || prop.type === 'integer') {
-			body[key] = Number(value)
+			const num = Number(value)
+			if (Number.isNaN(num)) continue
+			body[key] = num
 		} else if (prop.type === 'boolean') {
 			body[key] = Boolean(value)
 		} else {
@@ -103,26 +124,17 @@ function endpointToActionId(endpoint: DiscoveredEndpoint): string {
 
 function buildActionForEndpoint(self: ModuleInstance, endpoint: DiscoveredEndpoint): CompanionActionDefinition {
 	const override = endpointOverrides[endpoint.path]
-	const mutationMethods: HttpMethod[] = endpoint.methods.filter((m) => m !== 'GET')
+	const mutationMethods: HttpMethod[] = endpoint.methods.filter((m: HttpMethod) => m !== 'GET')
+
+	// Auto-pick the best method: prefer POST over deprecated PUT, fall back to first available
+	const primaryMethod = mutationMethods.includes('POST') ? 'POST' : mutationMethods[0]
+	const requestSchema = endpoint.requestSchemas?.[primaryMethod]
 
 	const fields: SomeCompanionActionInputField[] = []
-
-	if (mutationMethods.length > 1) {
-		fields.push({
-			id: 'method',
-			type: 'dropdown',
-			label: 'Method',
-			default: mutationMethods[0],
-			choices: mutationMethods.map((m) => ({ id: m, label: m })),
-		})
-	}
-
-	const primaryMethod = mutationMethods.includes('PUT') ? 'PUT' : mutationMethods[0]
-	const requestSchema = endpoint.requestSchemas?.[primaryMethod]
 	fields.push(...buildFieldsFromSchema(requestSchema, override?.propertyOverrides))
 
 	const actionName = override?.label ?? endpoint.summary
-	const actionDescription = override?.description ?? `${mutationMethods.join('/')} ${endpoint.path}`
+	const actionDescription = override?.description ?? endpoint.path
 
 	return {
 		name: actionName,
@@ -131,19 +143,14 @@ function buildActionForEndpoint(self: ModuleInstance, endpoint: DiscoveredEndpoi
 		callback: async (event: CompanionActionEvent) => {
 			try {
 				const actionOptions = (event.options ?? {}) as Record<string, unknown>
-
-				let method: HttpMethod = primaryMethod
-				if (mutationMethods.length > 1 && actionOptions.method) {
-					const requested = (typeof actionOptions.method === 'string' ? actionOptions.method : '') as HttpMethod
-					if (mutationMethods.includes(requested)) method = requested
-				}
+				const method: HttpMethod = primaryMethod
 
 				const body =
 					method === 'GET' || method === 'DELETE'
 						? undefined
 						: buildBodyFromOptions(endpoint.requestSchemas?.[method] ?? requestSchema, actionOptions)
 
-				const result = await self.client.execute(method, endpoint.path, body)
+				const result = await self.client.request(method, endpoint.path, body)
 				self.store.set(endpoint.path, result, 'rest')
 			} catch (error) {
 				self.log('error', `Action '${endpoint.path}' failed: ${error instanceof Error ? error.message : String(error)}`)
@@ -155,10 +162,11 @@ function buildActionForEndpoint(self: ModuleInstance, endpoint: DiscoveredEndpoi
 export function buildActions(self: ModuleInstance, endpoints: DiscoveredEndpoint[]): CompanionActionDefinitions {
 	const definitions: CompanionActionDefinitions = {}
 	for (const endpoint of endpoints) {
-		const hasMutation = endpoint.methods.some((m) => m !== 'GET')
+		const hasMutation = endpoint.methods.some((m: HttpMethod) => m !== 'GET')
 		if (!hasMutation) continue
 		if (endpoint.unsupported) continue
 		if (endpoint.deprecated) continue
+		if (hasTemplateParams(endpoint.path)) continue
 
 		const id = endpointToActionId(endpoint)
 		definitions[id] = buildActionForEndpoint(self, endpoint)

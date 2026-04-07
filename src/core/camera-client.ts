@@ -91,7 +91,7 @@ export class CameraClient {
 
 		const url = `${this.wsProtocol()}://${this.config.host}:${this.config.port}${this.wsPath}`
 		try {
-			await new Promise<void>((resolve, reject) => {
+			await new Promise<void>((resolve: () => void, reject: (err: Error) => void) => {
 				const ws = new WebSocketCtor(url)
 				let settled = false
 				const timeout = setTimeout(() => {
@@ -215,10 +215,6 @@ export class CameraClient {
 	removePropertySubscription(property: string): void {
 		this.subscribedProperties.delete(property)
 		this.sendUnsubscribe(property)
-	}
-
-	async execute(method: HttpMethod, path: string, body?: unknown): Promise<unknown> {
-		return this.request(method, path, body)
 	}
 
 	async request(method: HttpMethod, path: string, body?: unknown): Promise<unknown> {

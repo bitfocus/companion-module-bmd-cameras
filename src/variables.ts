@@ -1,6 +1,6 @@
 import type { CompanionVariableDefinition, CompanionVariableValues } from '@companion-module/base'
 import type { ModuleInstance } from './main.js'
-import type { DiscoveredEndpoint } from './types.js'
+import { hasTemplateParams, type DiscoveredEndpoint } from './types.js'
 import { endpointOverrides } from './overrides.js'
 
 function endpointToVariablePrefix(endpoint: DiscoveredEndpoint): string {
@@ -20,7 +20,7 @@ function toStringValue(input: unknown): string {
 
 function getPathValue(obj: unknown, fieldPath: string): unknown {
 	if (!fieldPath) return obj
-	const parts = fieldPath.split('.').filter((p) => p.length > 0)
+	const parts = fieldPath.split('.').filter((p: string) => p.length > 0)
 	let current: unknown = obj
 	for (const part of parts) {
 		if (!current || typeof current !== 'object') return undefined
@@ -39,6 +39,7 @@ export function buildVariableDefinitions(endpoints: DiscoveredEndpoint[]): Compa
 	for (const endpoint of endpoints) {
 		if (!endpoint.methods.includes('GET')) continue
 		if (endpoint.unsupported) continue
+		if (hasTemplateParams(endpoint.path)) continue
 
 		const prefix = endpointToVariablePrefix(endpoint)
 		const override = endpointOverrides[endpoint.path]
@@ -72,6 +73,7 @@ export function updateVariableValues(self: ModuleInstance, endpoints: Discovered
 	for (const endpoint of endpoints) {
 		if (!endpoint.methods.includes('GET')) continue
 		if (endpoint.unsupported) continue
+		if (hasTemplateParams(endpoint.path)) continue
 
 		const prefix = endpointToVariablePrefix(endpoint)
 		const storeValue = self.store.get(endpoint.path)

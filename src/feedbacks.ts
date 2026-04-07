@@ -6,7 +6,7 @@ import {
 	type CompanionFeedbackValueEvent,
 } from '@companion-module/base'
 import type { ModuleInstance } from './main.js'
-import type { DiscoveredEndpoint } from './types.js'
+import { hasTemplateParams, type DiscoveredEndpoint } from './types.js'
 import { endpointOverrides } from './overrides.js'
 
 function getValueByPath(input: unknown, path: string): unknown {
@@ -40,7 +40,8 @@ export function buildFeedbacks(self: ModuleInstance, endpoints: DiscoveredEndpoi
 	const definitions: CompanionFeedbackDefinitions = {}
 
 	const subscribableEndpoints = endpoints.filter(
-		(ep) => ep.subscribable && ep.methods.includes('GET') && !ep.unsupported,
+		(ep: DiscoveredEndpoint) =>
+			ep.subscribable && ep.methods.includes('GET') && !ep.unsupported && !hasTemplateParams(ep.path),
 	)
 
 	if (subscribableEndpoints.length === 0) return definitions

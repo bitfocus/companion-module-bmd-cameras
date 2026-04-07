@@ -18,10 +18,10 @@ export class FeedbackSubscriptions {
 		if (!property) return
 		this.feedbackToProperty.delete(feedbackId)
 
-		const set = this.propertyToFeedbacks.get(property)
-		if (!set) return
-		set.delete(feedbackId)
-		if (set.size === 0) this.propertyToFeedbacks.delete(property)
+		const feedbackIds = this.propertyToFeedbacks.get(property)
+		if (!feedbackIds) return
+		feedbackIds.delete(feedbackId)
+		if (feedbackIds.size === 0) this.propertyToFeedbacks.delete(property)
 	}
 
 	getFeedbackIdsForProperty(property: string): string[] {
