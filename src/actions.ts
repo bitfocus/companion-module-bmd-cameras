@@ -221,52 +221,188 @@ function endpointToActionId(endpoint: DiscoveredEndpoint): string {
 	return endpoint.path.replace(/^\//, '').replace(/\//g, '_')
 }
 
-function buildActionForEndpoint(
+/** Per-path mutex to serialize concurrent partial updates */
+const pathMutexes = new Map<string, Promise<void>>()
+
+async function withMutex(path: string, fn: () => Promise<void>): Promise<void> {
+	const prev = pathMutexes.get(path) ?? Promise.resolve()
+	const next = prev.then(fn, fn)
+	pathMutexes.set(path, next)
+	await next
+}
+
+function hasNestedSchema(schema: ParsedSchema | undefined): boolean {
+	if (!schema?.properties) return false
+	return Object.values(schema.properties).some(
+		(prop: SchemaProperty) => prop.type === 'object' || prop.properties !== undefined,
+	)
+}
+
+function getMutationMethod(endpoint: DiscoveredEndpoint): HttpMethod {
+	const mutationMethods: HttpMethod[] = endpoint.methods.filter((m: HttpMethod) => m !== 'GET')
+	return mutationMethods.includes('POST') ? 'POST' : mutationMethods[0]
+}
+
+function getMutationName(endpoint: DiscoveredEndpoint, method: HttpMethod): string {
+	const override = endpointOverrides[endpoint.path]
+	return (
+		override?.label ??
+		endpoint.methodSummaries?.[method] ??
+		endpoint.methodSummaries?.PUT ??
+		endpoint.methodSummaries?.POST ??
+		endpoint.summary
+	)
+}
+
+function getDynamicChoices(
+	self: ModuleInstance,
+	schema: ParsedSchema | undefined,
+	endpointPath: string,
+	allEndpoints: DiscoveredEndpoint[],
+): Record<string, { id: string; label: string }[]> {
+	const choices: Record<string, { id: string; label: string }[]> = {}
+	if (!schema?.properties) return choices
+	for (const key of Object.keys(schema.properties)) {
+		const found = findSupportedChoices(self.store, endpointPath, key, allEndpoints)
+		if (found) choices[key] = found
+	}
+	return choices
+}
+
+/** Deep merge: overlay partial values onto base, returning a new object */
+function deepMerge(base: Record<string, unknown>, overlay: Record<string, unknown>): Record<string, unknown> {
+	const result: Record<string, unknown> = { ...base }
+	for (const [key, value] of Object.entries(overlay)) {
+		if (
+			value !== null &&
+			typeof value === 'object' &&
+			!Array.isArray(value) &&
+			result[key] !== null &&
+			typeof result[key] === 'object' &&
+			!Array.isArray(result[key])
+		) {
+			result[key] = deepMerge(result[key] as Record<string, unknown>, value as Record<string, unknown>)
+		} else {
+			result[key] = value
+		}
+	}
+	return result
+}
+
+/** Read current state, merge with partial body, then write. Serialized per-path. */
+async function readMergeWrite(
+	self: ModuleInstance,
+	endpoint: DiscoveredEndpoint,
+	method: HttpMethod,
+	partialBody: Record<string, unknown>,
+): Promise<void> {
+	await withMutex(endpoint.path, async () => {
+		let body = partialBody
+
+		if (endpoint.methods.includes('GET')) {
+			try {
+				const current = await self.client.request('GET', endpoint.path)
+				if (current && typeof current === 'object' && !Array.isArray(current)) {
+					body = deepMerge(current as Record<string, unknown>, partialBody)
+				}
+			} catch {
+				// GET fails — send the partial as-is
+			}
+		}
+
+		const result = await self.client.request(method, endpoint.path, body)
+		self.store.set(endpoint.path, result, 'rest')
+	})
+}
+
+/** Standard full-update action */
+function buildFullAction(
 	self: ModuleInstance,
 	endpoint: DiscoveredEndpoint,
 	allEndpoints: DiscoveredEndpoint[],
 ): CompanionActionDefinition {
+	const method = getMutationMethod(endpoint)
+	const requestSchema = endpoint.requestSchemas?.[method]
 	const override = endpointOverrides[endpoint.path]
-	const mutationMethods: HttpMethod[] = endpoint.methods.filter((m: HttpMethod) => m !== 'GET')
-
-	// Auto-pick the best method: prefer POST over deprecated PUT, fall back to first available
-	const primaryMethod = mutationMethods.includes('POST') ? 'POST' : mutationMethods[0]
-	const requestSchema = endpoint.requestSchemas?.[primaryMethod]
-
-	// Look up dynamic choices from "supported*" endpoints in the store
-	const dynamicChoices: Record<string, { id: string; label: string }[]> = {}
-	if (requestSchema?.properties) {
-		for (const key of Object.keys(requestSchema.properties)) {
-			const choices = findSupportedChoices(self.store, endpoint.path, key, allEndpoints)
-			if (choices) dynamicChoices[key] = choices
-		}
-	}
+	const dynamicChoices = getDynamicChoices(self, requestSchema, endpoint.path, allEndpoints)
 
 	const fields: SomeCompanionActionInputField[] = []
 	fields.push(...buildFieldsFromSchema(requestSchema, override?.propertyOverrides, dynamicChoices))
 
-	// Use the mutation method's summary (e.g., "Set..." instead of "Get...")
-	const mutationSummary =
-		endpoint.methodSummaries?.[primaryMethod] ?? endpoint.methodSummaries?.PUT ?? endpoint.methodSummaries?.POST
-	const actionName = override?.label ?? mutationSummary ?? endpoint.summary
-	const actionDescription = override?.description ?? endpoint.path
-
 	return {
-		name: actionName,
-		description: actionDescription,
+		name: getMutationName(endpoint, method),
+		description: endpoint.path,
 		options: fields,
 		callback: async (event: CompanionActionEvent) => {
 			try {
 				const actionOptions = (event.options ?? {}) as Record<string, unknown>
-				const method: HttpMethod = primaryMethod
+				const body = buildBodyFromOptions(requestSchema, actionOptions)
+				if (!body) return
 
-				const body =
-					method === 'GET' || method === 'DELETE'
-						? undefined
-						: buildBodyFromOptions(endpoint.requestSchemas?.[method] ?? requestSchema, actionOptions)
+				if (hasNestedSchema(requestSchema)) {
+					await readMergeWrite(self, endpoint, method, body)
+				} else {
+					const result = await self.client.request(method, endpoint.path, body)
+					self.store.set(endpoint.path, result, 'rest')
+				}
+			} catch (error) {
+				self.log('error', `Action '${endpoint.path}' failed: ${error instanceof Error ? error.message : String(error)}`)
+			}
+		},
+	}
+}
 
-				const result = await self.client.request(method, endpoint.path, body)
-				self.store.set(endpoint.path, result, 'rest')
+/** Single-field action for nested endpoints: pick one field, set just that value */
+function buildSingleFieldAction(self: ModuleInstance, endpoint: DiscoveredEndpoint): CompanionActionDefinition {
+	const method = getMutationMethod(endpoint)
+	const requestSchema = endpoint.requestSchemas?.[method]
+	const leaves = collectSchemaLeaves(requestSchema!)
+
+	const fieldChoices = leaves.map((leaf: { fieldId: string; prop: SchemaProperty }) => ({
+		id: leaf.fieldId,
+		label: leaf.prop.description ?? leaf.fieldId,
+	}))
+
+	return {
+		name: `${getMutationName(endpoint, method)} (single field)`,
+		description: `Set one field on ${endpoint.path}`,
+		options: [
+			{
+				id: 'fieldId',
+				type: 'dropdown',
+				label: 'Field',
+				default: fieldChoices[0]?.id ?? '',
+				choices: fieldChoices,
+			},
+			{
+				id: 'value',
+				type: 'textinput',
+				label: 'Value',
+				default: '',
+				useVariables: true,
+			},
+		],
+		callback: async (event: CompanionActionEvent) => {
+			try {
+				const actionOptions = (event.options ?? {}) as Record<string, unknown>
+				const fieldId = typeof actionOptions.fieldId === 'string' ? actionOptions.fieldId : ''
+				const rawValue = actionOptions.value
+				if (!fieldId || rawValue === undefined || rawValue === '') return
+
+				const leaf = leaves.find((l: { fieldId: string; prop: SchemaProperty }) => l.fieldId === fieldId)
+				if (!leaf) return
+
+				let coerced: unknown = rawValue
+				if (leaf.prop.type === 'number' || leaf.prop.type === 'integer') {
+					coerced = Number(rawValue)
+					if (Number.isNaN(coerced as number)) return
+				} else if (leaf.prop.type === 'boolean') {
+					coerced = rawValue === 'true' || rawValue === '1' || rawValue === true
+				}
+
+				const body: Record<string, unknown> = {}
+				setNestedValue(body, fieldId, coerced)
+				await readMergeWrite(self, endpoint, method, body)
 			} catch (error) {
 				self.log('error', `Action '${endpoint.path}' failed: ${error instanceof Error ? error.message : String(error)}`)
 			}
@@ -284,7 +420,15 @@ export function buildActions(self: ModuleInstance, endpoints: DiscoveredEndpoint
 		if (hasTemplateParams(endpoint.path)) continue
 
 		const id = endpointToActionId(endpoint)
-		definitions[id] = buildActionForEndpoint(self, endpoint, endpoints)
+		const method = getMutationMethod(endpoint)
+		const requestSchema = endpoint.requestSchemas?.[method]
+
+		definitions[id] = buildFullAction(self, endpoint, endpoints)
+
+		// For nested endpoints, also generate a single-field action
+		if (hasNestedSchema(requestSchema)) {
+			definitions[`${id}_single`] = buildSingleFieldAction(self, endpoint)
+		}
 	}
 	return definitions
 }
