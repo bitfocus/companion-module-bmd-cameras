@@ -1,0 +1,313 @@
+openapi: 3.0.1
+info:
+  title: Slate Control API
+  description: API to manage digital slate data.
+  version: 1.0.0
+servers:
+  - url: /api/v1
+tags:
+- name: Slate
+  description: Slate Control API
+paths:
+  /slates/nextClip:
+    get:
+      summary: Retrieve the digital slate for the next clip.
+      tags:
+      - Slate
+      responses:
+        200:
+          description: Returns the slate data for the next clip.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SlateData'
+        409:
+          description: Slate data is not available.
+    put:
+      summary: Update the slate data for the next clip.
+      tags:
+      - Slate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SlateUpdate'
+      responses:
+        200:
+          description: Successfully updated the slate data.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SlateData'
+        409:
+          description: Partial update with errors.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetails'
+
+  /slates/nextClip/resetProjectData:
+    post:
+      summary: Reset the project data for the next clip's slate.
+      tags:
+      - Slate
+      responses:
+        200:
+          description: Project data reset successfully.
+  
+  /slates/clips/{deviceName}/{path}/resetProjectData:
+    post:
+      summary: Reset the project data for the next clip's slate.
+      tags:
+      - Slate
+      parameters:
+        - in: path
+          name: deviceName
+          required: true
+          schema:
+            type: string
+          example: "A001-nvme4"
+          description: Name of the device where the clip is stored. This is the same as the web browser's device name.
+        - in: path
+          name: path
+          required: true
+          schema:
+            type: string
+          example: "Clip001.braw"
+          description: Path to the clip.
+      responses:
+        200:
+          description: Project data reset successfully.
+
+  /slates/nextClip/resetLensData:
+    post:
+      summary: Reset the lens data for the next clip's slate.
+      tags:
+      - Slate
+      responses:
+        200:
+          description: Lens data reset successfully.
+  
+  /slates/clips/{deviceName}/{path}/resetLensData:
+    post:
+      summary: Reset the lens data for the next clip's slate.
+      tags:
+      - Slate
+      parameters:
+        - in: path
+          name: deviceName
+          required: true
+          schema:
+            type: string
+          example: "A001-nvme4"
+          description: Name of the device where the clip is stored. This is the same as the web browser's device name.
+        - in: path
+          name: path
+          required: true
+          schema:
+            type: string
+          example: "Clip001.braw"
+          description: Path to the clip.
+      responses:
+        200:
+          description: Lens data reset successfully.
+
+  /slates/clips/{deviceName}/{path}:
+    get:
+      summary: Retrieve slate data for a specific clip.
+      tags:
+      - Slate
+      parameters:
+        - in: path
+          name: deviceName
+          required: true
+          schema:
+            type: string
+          example: "A001-nvme4"
+          description: Name of the device where the clip is stored. This is the same as the web browser's device name.
+        - in: path
+          name: path
+          required: true
+          schema:
+            type: string
+          example: "Clip001.braw"
+          description: Path to the clip.
+      responses:
+        200:
+          description: Returns the slate data for the specified clip.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SlateData'
+        404:
+          description: Clip not found.
+    put:
+      summary: Update the slate data for a specific clip.
+      tags:
+      - Slate
+      parameters:
+        - in: path
+          name: deviceName
+          required: true
+          schema:
+            type: string
+          example: "A001-nvme4"
+          description: Name of the device where the clip is stored. This is the same as the web browser's device name.
+        - in: path
+          name: path
+          required: true
+          schema:
+            type: string
+          example: "Clip001.braw"
+          description: Path to the clip.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SlateUpdate'
+      responses:
+        200:
+          description: Successfully updated the slate data.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SlateData'
+        409:
+          description: Partial update with errors.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetails'
+
+components:
+  schemas:
+    SlateData:
+      type: object
+      properties:
+        clip:
+          type: object
+          properties:
+            clipName:
+              type: string
+              example: "Next Clip"
+            reel:
+              $ref: '#/components/schemas/Reel'
+            scene:
+              $ref: '#/components/schemas/Scene'
+            sceneLocation:
+              $ref: '#/components/schemas/SceneLocation'
+            sceneTime:
+              $ref: '#/components/schemas/SceneTime'
+            shotType:
+              $ref: '#/components/schemas/ShotType'
+            slateFor:
+              $ref: '#/components/schemas/SlateFor'
+            take:
+              $ref: '#/components/schemas/Take'
+            takeType:
+              $ref: '#/components/schemas/TakeType'
+            goodTake:
+              type: boolean
+        lens:
+          $ref: '#/components/schemas/Lens'
+        project:
+          $ref: '#/components/schemas/Project'
+    SlateUpdate:
+      type: object
+      properties:
+        clip:
+          type: object
+          properties:
+            reel:
+              $ref: '#/components/schemas/Reel'
+            scene:
+              $ref: '#/components/schemas/Scene'
+            take:
+              $ref: '#/components/schemas/Take'
+            shotType:
+              $ref: '#/components/schemas/ShotType'
+            takeType:
+              $ref: '#/components/schemas/TakeType'
+            sceneLocation:
+              $ref: '#/components/schemas/SceneLocation'
+            sceneTime:
+              $ref: '#/components/schemas/SceneTime'
+            goodTake:
+              type: boolean
+        lens:
+          $ref: '#/components/schemas/Lens'
+        project:
+          $ref: '#/components/schemas/Project'
+    Reel:
+      type: integer
+      example: 1
+    Scene:
+      type: string
+      example: "1"
+    ShotType:
+      type: string
+      enum: ["None", "WS", "MS", "MCU", "CU", "BCU", "ECU"]
+    SlateFor:
+      type: string
+      enum: ["Clip", "Next Clip"]
+    TakeType:
+      type: string
+      enum: ["None", "PU", "VFX", "SER"]
+    Take:
+      type: integer
+      example: 1
+    SceneLocation:
+      type: string
+      enum: ["Interior", "Exterior"]
+    SceneTime:
+      type: string
+      enum: ["Day", "Night"]
+    Lens:
+      type: object
+      properties:
+        lensType:
+          type: string
+          example: "EF 50mm f/1.8 STM"
+        iris:
+          type: string
+          example: "f1.8"
+        focalLength:
+          type: string
+          example: "50mm"
+        distance:
+
+          type: string
+          example: "13'"
+        filter:
+          type: string
+          example: "ND2"
+    Project:
+      type: object
+      properties:
+        projectName:
+          type: string
+        director:
+          type: string
+        camera:
+          type: string
+        cameraOperator:
+          type: string
+    ErrorDetails:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Partial set applied, see details for fields that failed to update."
+        details:
+          type: array
+          items:
+            type: object
+            properties:
+              field:
+                type: string
+                example: "takeType"
+              message:
+                type: string
+                example: "Field 'takeType' was not in a valid format."

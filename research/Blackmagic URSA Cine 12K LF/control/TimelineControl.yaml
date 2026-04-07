@@ -1,0 +1,290 @@
+openapi: 3.0.1
+info:
+  title: Timeline Control API
+  description: API for controlling playback timeline.
+  version: 1.0.0
+servers:
+- url: /control/api/v1
+tags:
+  - name: Timeline
+    description: Timeline Control API
+paths:
+  /timelines/0:
+    get:
+      summary: Get the playback timeline.
+      tags:
+      - Timeline
+      responses:
+        200:
+          description: Playback timeline.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Timeline'
+        404:
+          description: No timeline / disk available.
+    delete:
+      summary: Clear the current playback timeline. Deprecated, prefer to use POST /timelines/0/clear
+      tags:
+      - Timeline
+      deprecated: true
+      responses:
+        204:
+          description: The timeline was cleared.
+        501:
+          description: The operation is not supported on this device.
+    post:
+      summary: Add a clip to the timeline.
+      tags:
+      - Timeline
+      requestBody:
+        description: Clip information to add.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddClipToTimeline'
+            examples:
+              AddClipWithClipUniqueId42:
+                description: Adds a clip with clipUniqueId 42 to the end of the timeline.
+                value:
+                  clips: 42
+              AddClipWithClipUniqueId42ToStart:
+                description: Adds a clip with clipUniqueId 42 to the start of the timeline.
+                value:
+                  insertBefore: 0
+                  clips: 42
+              AddClipWithClipUniqueId42BeforeSecondClip:
+                description: Adds a clip with clipUniqueId 42 before the second clip in the timeline.
+                value:
+                  insertBefore: 1
+                  clips: 42
+              AddClipWithClipUniqueId42AnotherWay:
+                description: Adds a clip with clipUniqueId 42 to the end of the timeline.
+                value:
+                  clips:
+                    clipUniqueId: 42
+              AddClipWithClipUniqueId42CroppedStart:
+                description: Adds a clip with clipUniqueId 42, starting from the tenth frame of the clip, to the end of the timeline.
+                value:
+                  clips:
+                    clipUniqueId: 42
+                    clipIn: 9
+              AddClipWithClipUniqueId42CroppedEnd:
+                description: Adds a clip with clipUniqueId 42, using only the first 30 frames, to the end of the timeline.
+                value:
+                  clips:
+                    clipUniqueId: 42
+                    frameCount: 30
+              AddTheSameClipManyTimes:
+                description: Adds 3 instances of the clip with clipUniqueId 42 to the end of the timeline.
+                value:
+                  clips: [42, 42, 42]
+              AddMultipleClips:
+                description: Adds clips with clipUniqueIds 42, 10, 23 and 42 to the end of the timeline.
+                value:
+                  clips: [42, 10, 23, 42]
+              AddVariousClips:
+                description: Adds various clips to the timeline before the seconds clip.
+                value:
+                  insertBefore: 1
+                  clips:
+                    - 42
+                    - 10
+                    - clipUniqueId: 42
+                    - clipUniqueId: 2
+                      frameCount: 10
+                      clipIn: 10
+      responses:
+        204:
+          description: The clip was added to the timeline as specified.
+        501:
+          description: The operation is not supported on this device.
+  /timelines/0/add:
+    post:
+      summary: Add a clip to the end of the timeline. Deprecated, use POST /timelines/0 to add clips within the timeline.
+      tags:
+      - Timeline
+      deprecated: true
+      requestBody:
+        description: Clip(s) to add to the end of the timeline.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddClipsToEndOfTimelineDeprecated'
+            examples:
+              AddClipWithClipUniqueId42:
+                description: Adds a clip with clipUniqueId 42 to the end of the timeline.
+                value:
+                  clips: 42
+              AddTheSameClipManyTimes:
+                description: Adds 3 instances of the clip with clipUniqueId 42 to the end of the timeline.
+                value:
+                  clips: [42, 42, 42]
+              AddMultipleClips:
+                description: Adds clips with clipUniqueIds 42, 10, 23 and 42 to the end of the timeline.
+                value:
+                  clips: [42, 10, 23, 42]
+      responses:
+        204:
+          description: The clip was added to the end of the timeline.
+        501:
+          description: The operation is not supported on this device.
+  /timelines/0/clear:
+     post:
+      summary: Clear the playback timeline.
+      tags:
+      - Timeline
+      responses:
+        204:
+          description: The timeline was cleared.
+        501:
+          description: The operation is not supported on this device.
+  /timelines/0/clips/{timelineClipIndex}:
+    delete:
+      tags:
+      - Timeline
+      parameters:
+        - name: timelineClipIndex
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: The (0-based) timeline clip index of the clip to remove from the timeline.
+          example:
+            value: 0
+            summary: Delete the first clip in the timeline.
+      summary: Remove the specified clip from the timeline.
+      responses:
+        204:
+          description: The specified clip was removed from the timeline.
+        501:
+          description: The operation is not supported on this device.
+components:
+  schemas:
+    Timeline:
+      type: object
+      properties:
+        clips:
+          type: array
+          items:
+            $ref: "#/components/schemas/TimelineClip"
+    TimelineClip:
+      type: object
+      description: Timeline clip.
+      required:
+        - clipUniqueId
+      properties:
+        clipUniqueId:
+          type: integer
+          description: Unique identifier used to identify this media clip. If the same media clip is added to the timeline multiple times, each timeline clip has the same clipUniqueId
+          example: 1
+        frameCount:
+          type: integer
+          description: Duration of timeline clip in frames, the number of frames in this clip on the timeline.
+          example: 90000
+        durationTimecode:
+          type: string
+          example: 00:05:03:22
+          description: Duration of the timeline clip in timecode format serialised as string. This will differ to durationTimecode reported in /clips for this clipUniqueId if clipIn or frameCount was specified when adding this clip to the timeline.
+        clipIn:
+          type: string
+          description: In frame offset for the clip on the timeline, where 0 is the first frame of the on-disk clip.
+          example: 20
+        inTimecode:
+          type: string
+          description: Clip timecode of the first frame of this timeline clip serialised as string (clip startTimecode + clipIn frames).
+          example: 00:00:03:22
+        timelineIn:
+          type: string
+          description: Timeline position of the first frame of this clip, where 0 is the first frame of the timeline.
+          example: 10
+        timelineInTimecode:
+          type: string
+          description: Timeline timecode of the first frame of this timeline clip serialised as string.
+          example: 00:00:00:10
+    AddClipToTimeline:
+      oneOf:
+        - type: object
+          description: Add multiple media clips to the timeline with optional insertion point and clip in/out points.
+          required:
+            - clips
+          properties:
+            insertBefore:
+              $ref: "#/components/schemas/ClipInsertBefore"
+            clips:
+              description: List of clips to add to the timeline.
+              type: array
+              items:
+                $ref: "#/components/schemas/ClipWithOptionalInOutPoints"
+        - type: object
+          description: Add multiple media clips to the timeline with optional insertion point.
+          required:
+            - clips
+          properties:
+            insertBefore:
+              $ref: "#/components/schemas/ClipInsertBefore"
+            clips:
+              description: List of clips to add to the timeline.
+              type: array
+              items:
+                $ref: "#/components/schemas/ClipUniqueIdInteger"
+        - type: object
+          description: Add a single clip to the timeline with optional insertion point and clip in/out points.
+          required:
+            - clips
+          properties:
+            insertBefore:
+              $ref: "#/components/schemas/ClipInsertBefore"
+            clips:
+              $ref: "#/components/schemas/ClipWithOptionalInOutPoints"
+        - type: object
+          description: Add a single clip to the timeline with optional insertion point.
+          required:
+            - clips
+          properties:
+            insertBefore:
+              $ref: "#/components/schemas/ClipInsertBefore"
+            clips:
+              $ref: "#/components/schemas/ClipUniqueIdInteger"
+    ClipInsertBefore:
+      description: >
+        Clip(s) will be inserted before the clip at this timeline clip index, where 0 inserts to the beginning of the timeline.
+        If omitted, inserts to the end of the timeline.
+      type: integer
+      example: 0
+    ClipUniqueIdInteger:
+      type: integer
+      description: Unique ID (clipUniqueId) of the media clip to add to the timeline.
+      example: 1
+    ClipWithOptionalInOutPoints:
+      type: object
+      required:
+        - clipUniqueId
+      description: Clip to add to the timeline, optionally cropping the clip before adding to the timeline.
+      properties:
+        clipUniqueId:
+          $ref: "#/components/schemas/ClipUniqueIdInteger"
+        clipIn:
+          type: integer
+          description: Insert this clip starting from this frame within the media clip. If omitted, starts from the beginning of the clip -- frame 0.
+          example: 40
+        frameCount:
+          type: integer
+          description: Number of frames of this clip to add to the timeline. If omitted, use the whole clip, or the rest of the clip if clipIn was specified.
+          example: 40
+    AddClipsToEndOfTimelineDeprecated:
+      oneOf:
+        - type: object
+          description: Add one clip to the end of the timeline.
+          properties:
+            clips:
+              $ref: "#/components/schemas/ClipUniqueIdInteger"
+        - type: object
+          description: Add many clips to the end of the timeline.
+          properties:
+            clips:
+              type: array
+              description: List of clipUniqueIds of clips to add to end of timeline.
+              items:
+                $ref: "#/components/schemas/ClipUniqueIdInteger"
+              example: [1, 2, 3, 1]

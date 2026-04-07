@@ -1,0 +1,316 @@
+openapi: 3.0.1
+info:
+  title: Transport Control API
+  description: API for controlling Transport on Blackmagic Design products.
+  version: 1.0.0
+servers:
+- url: /control/api/v1
+tags:
+  - name: Transport
+    description: Transport Control API
+paths:
+  /transports/0:
+    get:
+      tags:
+      - Transport
+      summary: Get device's basic transport status.
+      responses:
+        200:
+          description: Transport status.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransportResponse'
+    put:
+      summary: Set device's basic transport status.
+      tags:
+      - Transport
+      requestBody:
+          description: Set the transport mode.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  mode:
+                    type: string
+                    description: Transport mode.
+                    example: InputPreview
+                    enum:
+                    - InputPreview
+                    - Output
+      responses:
+        204:
+          description: Transport mode was set.
+        400:
+          description: Failed to set transport mode.
+  /transports/0/stop:
+    get:
+      summary: Determine if transport is stopped.
+      tags:
+      - Transport
+      responses:
+        200:
+          description: Transport stop response.
+          content:
+            application/json:
+              schema:
+                description: True when transport mode is InputPreview or when in Output mode and speed is 0.
+                type: boolean
+    put:
+      summary: Stop transport. Deprecated, use POST /transports/0/stop instead.
+      deprecated: true
+      tags:
+      - Transport
+      responses:
+        204:
+          description: Transport stopped.
+    post:
+      summary: Stop transport.
+      tags:
+      - Transport
+      responses:
+        204:
+          description: Transport stopped.
+  /transports/0/play:
+    get:
+      summary: Determine if transport is playing.
+      tags:
+      - Transport
+      responses:
+        200:
+          description: Transport play response.
+          content:
+            application/json:
+              schema:
+                description: True when transport is in Output mode and speed is non-zero.
+                type: boolean
+    put:
+      summary: Start playing on transport. Deprecated, use POST /transports/0/play instead.
+      deprecated: true
+      tags:
+      - Transport
+      responses:
+        204:
+          description: Transport playing.
+        400:
+          description: Failed to set transport to play.
+    post:
+      summary: Start playing on transport.
+      tags:
+      - Transport
+      responses:
+        204:
+          description: Transport playing.
+        400:
+          description: Failed to set transport to play.
+  /transports/0/playback:
+    get:
+      summary: Get playback state.
+      tags:
+      - Transport
+      responses:
+        200:
+          description: Transport playback state.
+          content:
+              application/json:
+                schema:
+                  $ref: '#/components/schemas/Playback'
+    put:
+      summary: Set playback state.
+      tags:
+      - Transport
+      requestBody:
+        description: Update playback state.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Playback'
+      responses:
+        204:
+          description: Updated transport playback state.
+        400:
+          description: Failed to set transport playback state.
+  /transports/0/record:
+    get:
+      summary: Get record state.
+      tags:
+      - Transport
+      responses:
+        200:
+          description: Recording state.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetRecord'
+    put:
+      summary: Set record state. Deprecated, use POST /transports/0/record instead.
+      deprecated: true
+      tags:
+      - Transport
+      requestBody:
+        description: Update record state.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PutRecord'
+      responses:
+        204:
+          description: Recording state updated.
+        400:
+          description: Failed to update recording state.
+    post:
+      summary: Start recording.
+      tags:
+      - Transport
+      requestBody:
+        description: Optional additional recording information, omit request body to use device defaults.
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Record'
+      responses:
+        204:
+          description: Recording started.
+        400:
+          description: Failed to start recording.
+  /transports/0/clipIndex:
+    get:
+      summary: Get the clip index of the currently playing clip on the timeline.
+      tags:
+      - Transport
+      responses:
+        200:
+          description: Clip index response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClipIndex'
+              examples:
+                NoOrEmptyTimeline:
+                  value:
+                    clipIndex: null
+                PlayingFirstClip:
+                  value:
+                    clipIndex: 0
+                PlayingSecondClip:
+                  value:
+                    clipIndex: 1
+  /transports/0/timecode:
+    get:
+      summary: Get device timecode.
+      tags:
+      - Transport
+      responses:
+        200:
+          description: Timecode response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Timecode'
+  /transports/0/timecode/source:
+    get:
+      summary: Get timecode source selected on device.
+      tags:
+      - Transport
+      responses:
+        200:
+          description: Timecode source response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TimecodeSource'
+components:
+  schemas:
+    TransportResponse:
+      type: object
+      properties:
+        mode:
+          example: InputPreview
+          type: string
+          description: Transport mode.
+          enum:
+          - InputPreview
+          - InputRecord
+          - Output
+    Playback:
+      type: object
+      properties:
+        type:
+          example: Play
+          type: string
+          enum:
+          - Play
+          - Jog
+          - Shuttle
+          - Var
+        loop:
+          example: false
+          type: boolean
+          description: When true, playback loops from the end of the timeline to the beginning of the timeline.
+        singleClip:
+          example: false
+          type: boolean
+          description: When true, playback loops from the end of the current clip to the beginning of the current clip.
+        speed:
+          example: 1.0
+          type: number
+          description: Playback speed, 1.0 for normal forward playback.
+        position:
+          example: 0
+          type: integer
+          description: Playback position on the timeline in units of video frames, where 0 is the first frame of the timeline.
+    GetRecord:
+      type: object
+      properties:
+        recording:
+          type: boolean
+          example: true
+          description: If true, transport is in InputRecord mode.
+    PutRecord:
+      type: object
+      required:
+        - recording
+      properties:
+        recording:
+          type: boolean
+          description: If true, starts a recording, otherwise stops.
+        clipName:
+          type: string
+          example: ClipName.mov
+          description: Optional, sets the requested clip name to record to, when "recording" attribute is set to true.
+    Record:
+      type: object
+      properties:
+        clipName:
+          type: string
+          example: ClipName.mov
+          description: Optional, provides a specific name of clip to record to.
+    ClipIndex:
+      type: object
+      properties:
+        clipIndex:
+          nullable: true
+          type: number
+          description: The 0-based index of the clip being played on the timeline. null when there is no timeline or an empty timeline.
+    Timecode:
+      # TODO: cameras should be "time of day" timecode instead of "timeline" timecode, move this schema to a new yaml.
+      type: object
+      properties:
+        display:
+          type: string
+          description: The display timecode serialised as a string.
+          example: 00:00:03:22
+        timeline:
+          type: string
+          description: The timeline timecode serialised as a string.
+          example: 00:00:03:22
+    TimecodeSource:
+      type: object
+      properties:
+        timecode:
+          type: string
+          enum:
+          - Timeline
+          - Clip

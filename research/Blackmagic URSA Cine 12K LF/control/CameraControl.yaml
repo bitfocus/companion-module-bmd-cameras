@@ -1,0 +1,93 @@
+openapi: 3.0.1
+info:
+  title: Camera Control API
+  description: API For controlling the Camera specific features on Blackmagic Design products
+  version: 0.1.0
+servers:
+- url: /control/api/v1
+paths:
+  /camera/colorBars:
+    get:
+      summary: Get the status of color bars display
+      responses:
+        '200':
+          description: Returns the current status of color bars
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  enabled:
+                    type: boolean
+                    description: Indicates if the color bars are currently enabled
+        '500':
+          description: Internal server error
+    put:
+      summary: Set the status of color bars display
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                enabled:
+                  type: boolean
+                  description: Enable or disable the color bars
+      responses:
+        '204':
+          description: Color bars status updated successfully
+        '400':
+          description: Invalid request
+        '500':
+          description: Internal server error
+  /camera/programFeedDisplay:
+    get:
+      summary: Get the status of program feed display
+      responses:
+        '200':
+          description: Returns the current status of program feed display
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  enabled:
+                    type: boolean
+                    description: Indicates if the program feed display is currently enabled
+        '500':
+          description: Internal server error
+    put:
+      summary: Set the status of program feed display
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                enabled:
+                  type: boolean
+                  description: Enable or disable the program feed display
+      responses:
+        '204':
+          description: Program feed display status updated successfully
+        '400':
+          description: Invalid request format or value
+        '500':
+          description: Internal server error
+  /camera/tallyStatus:
+    get:
+      summary: Get the tally status of the camera
+      responses:
+        '200':
+          description: Returns the current tally status of the camera
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [None, Preview, Program]
+                    description: Current tally status of the camera
+        '500':
+          description: Internal server error

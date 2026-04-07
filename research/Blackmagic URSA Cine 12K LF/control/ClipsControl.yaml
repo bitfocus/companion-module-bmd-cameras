@@ -1,0 +1,132 @@
+openapi: 3.0.1
+info:
+  title: Clips Control API
+  description: API for listing clips on disk.
+  version: 1.0.0
+servers:
+- url: /control/api/v1
+tags:
+  - name: Clips
+    description: Clips Control API
+paths:
+  /clips:
+    get:
+      summary: Get the list of clips on the active disk.
+      tags:
+        - Clips
+      responses:
+        200:
+          description: List of clips on the active disk.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Clips'
+        404:
+          description: There is no active disk.
+components:
+  schemas:
+    Clips:
+      type: object
+      description: List of media clips.
+      required:
+      - clips
+      properties:
+        clips:
+          type: array
+          items:
+            required:
+              - clipUniqueId
+            allOf:
+              - $ref: '#/components/schemas/DiskClip'
+# TODO: move to shared schema
+    DiskClip:
+      type: object
+      description: Media clip.
+      properties:
+        clipUniqueId:
+          type: integer
+          description: Unique ID used to identify this clip.
+          example: 2
+        filePath:
+          type: string
+          description: Path to the file relative to the root of a mount.
+          example: Movie_0001.mp4
+        fileSize:
+          type: integer
+          description: Size of file on disk in bytes.
+          example: 182003000
+        codecFormat:
+          $ref: '#/components/schemas/CodecFormat'
+        videoFormat:
+          $ref: '#/components/schemas/VideoFormat'
+        startTimecode:
+          type: string
+          description: Start timecode of the clip serialised as string.
+          example: 00:00:03:22
+        durationTimecode:
+          type: string
+          example: 00:05:03:22
+          description: Duration of the clip in timecode format serialised as string.
+        frameCount:
+          type: integer
+          example: 9120
+          description: Number of frames in clip; duration of the clip in frames.
+    CodecFormat:
+      type: object
+      properties:
+        codec:
+          type: string
+          description: Currently selected codec.
+          example: ProRes:HQ
+        container:
+          type: string
+          description: Multimedia container format.
+          example: MOV
+    FrameRate:
+      type: string
+      description: Frame rate.
+      example: "29.97"
+      enum:
+        - "23.98"
+        - "24.00"
+        - "24"
+        - "25.00"
+        - "25"
+        - "29.97"
+        - "30.00"
+        - "30"
+        - "47.95"
+        - "48.00"
+        - "48"
+        - "50.00"
+        - "50"
+        - "59.94"
+        - "60.00"
+        - "60"
+        - "119.88"
+        - "120.00"
+        - "120"
+    VideoFormat:
+      type: object
+      description: Video format configuration.
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          description: Video format serialised as a string.
+          example: 1920x1080p29.97
+        frameRate:
+          $ref: "#/components/schemas/FrameRate"
+        height:
+          type: number
+          description: Height dimension of video format.
+          example: 1080
+        width:
+          type: number
+          description: Width dimension of video format.
+          example: 1920
+        interlaced:
+          type: boolean
+          description: Is the display format interlaced?
+          example: false

@@ -1,0 +1,203 @@
+openapi: 3.0.1
+info:
+  title: Media Pool Control API
+  description: API to manage media pool and handle uploads and project data.
+  version: 1.0.0
+servers:
+  - url: /api/v1
+tags:
+- name: Media Pool
+  description: Media Pool Control API
+paths:
+  /cloud/projects:
+    get:
+      summary: List all projects within the media pool.
+      tags:
+      - Media Pool
+      responses:
+        200:
+          description: Successfully retrieved the list of all projects.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ProjectData'
+
+  /cloud/projects/active:
+    get:
+      summary: Retrieve data of the actively uploading project.
+      tags:
+      - Media Pool
+      responses:
+        200:
+          description: Successfully retrieved the active project's data.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectData'
+
+  /cloud/projects/{projectID}:
+    get:
+      summary: Retrieve specific project data by project ID.
+      tags:
+      - Media Pool
+      parameters:
+        - in: path
+          name: projectID
+          required: true
+          schema:
+            type: integer
+          description: Unique identifier of the project.
+      responses:
+        200:
+          description: Successfully retrieved the project data.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectData'
+        404:
+          description: Project not found.
+
+  /cloud/clips:
+    get:
+      summary: List all clips within the media pool.
+      tags:
+      - Media Pool
+      responses:
+        200:
+          description: Successfully retrieved the list of all clips.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+                  format: uri
+
+  /cloud/clips/activeUploading:
+    get:
+      summary: Retrieve data of actively uploading clips.
+      tags:
+      - Media Pool
+      responses:
+        200:
+          description: Successfully retrieved the list of actively uploading clips.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ClipUploadData'
+
+  /cloud/clips/{deviceName}/{path}:
+    get:
+      summary: Retrieve specific clip data by device and path.
+      tags:
+      - Media Pool
+      parameters:
+        - in: path
+          name: deviceName
+          required: true
+          schema:
+            type: string
+          description: Name of the device where the clip is stored.
+        - in: path
+          name: path
+          required: true
+          schema:
+            type: string
+          description: Path to the clip.
+      responses:
+        200:
+          description: Successfully retrieved the clip data.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClipUploadData'
+        404:
+          description: Clip not found.
+
+components:
+  schemas:
+    ProjectData:
+      type: object
+      properties:
+        libraryID:
+          type: string
+        name:
+          type: string
+        private:
+          type: boolean
+        shared:
+          type: boolean
+        clips:
+          type: array
+          items:
+            type: string
+          description: List of clips associated with the project.
+        status:
+          $ref: '#/components/schemas/ProjectUploadStatus'
+
+    ProjectUploadStatus:
+      type: object
+      properties:
+        numClipsRequested:
+          type: integer
+        numClipsComplete:
+          type: integer
+        uploadPercent:
+          type: integer
+          format: int32
+          description: Percentage of upload completion.
+        numClipsPaused:
+          type: integer
+        outOfSpace:
+          type: boolean
+        secsRemaining:
+          type: integer
+          description: Estimated seconds remaining until upload is completed.
+        currentByteRate:
+          type: integer
+          description: Current byte rate of the upload process.
+
+    ClipUploadData:
+      type: object
+      properties:
+        path:
+          type: string
+          format: uri
+        projectID:
+          type: integer
+        status:
+          $ref: '#/components/schemas/ClipUploadStatus'
+
+    ClipUploadStatus:
+      type: object
+      properties:
+        projectID:
+          type: integer
+        outOfSpace:
+          type: boolean
+        proxyExtension:
+          type: string
+        growingFile:
+          type: boolean
+        originalUploadState:
+          $ref: '#/components/schemas/UploadStatus'
+        proxyUploadState:
+          $ref: '#/components/schemas/UploadStatus'
+        originalClipTotalSize:
+          type: integer
+        proxyClipTotalSize:
+          type: integer
+        originalClipCompletedSize:
+          type: integer
+        proxyClipCompletedSize:
+          type: integer
+        secsRemaining:
+          type: integer
+    
+    UploadStatus:
+      type: string
+      enum: [Unqueued, Paused, Queued, Uploading, Uploaded, Failed]

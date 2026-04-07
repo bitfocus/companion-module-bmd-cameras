@@ -1,0 +1,515 @@
+openapi: 3.0.1
+info:
+  title: Monitoring Control API
+  description: API for monitoring and controlling display settings in video equipment.
+  version: 1.0.0
+servers:
+  - url: /monitoring/api/v1
+tags:
+- name: Monitoring
+  description: Controls for monitoring features on displays.
+paths:
+  /monitoring/display:
+    get:
+      summary: Retrieve a list of all display names.
+      tags:
+      - Monitoring
+      responses:
+        200:
+          description: Returns a list of display names.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  displays:
+                    type: array
+                    items:
+                      type: string
+                    description: List of display names available.
+                    example: ['LCD1', 'SDIA', 'HDMI']
+
+  /monitoring/{displayName}/cleanFeed:
+    get:
+      summary: Get the clean feed enable state for a specific display.
+      tags:
+      - Monitoring
+      parameters:
+        - $ref: '#/components/parameters/displayName'
+      responses:
+        200:
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnableState'
+        404:
+          description: Display name not found.
+    put:
+      summary: Set the clean feed enable state for a specific display.
+      tags:
+      - Monitoring
+      parameters:
+        - $ref: '#/components/parameters/displayName'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnableState'
+      responses:
+        204:
+          description: Clean feed enabled/disabled successfully.
+        400:
+          description: Invalid input.
+        422:
+          description: Unable to process the contained instructions.
+
+  /monitoring/{displayName}/displayLUT:
+    get:
+      summary: Get the display LUT enable state for a specific display.
+      tags:
+      - Monitoring
+      parameters:
+        - $ref: '#/components/parameters/displayName'
+      responses:
+        200:
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnableState'
+        400:
+          description: Invalid display name.
+        404:
+          description: Display name not found.
+    put:
+      summary: Set the display LUT enable state for a specific display.
+      tags:
+      - Monitoring
+      parameters:
+        - $ref: '#/components/parameters/displayName'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnableState'
+      responses:
+        204:
+          description: Display LUT enabled/disabled successfully.
+        400:
+          description: Invalid input.
+        422:
+          description: Unprocessable Entity - Unable to process the contained instructions.
+
+  /monitoring/{displayName}/zebra:
+    get:
+      summary: Get the zebra enable state for a specific display.
+      tags:
+      - Monitoring
+      parameters:
+        - $ref: '#/components/parameters/displayName'
+      responses:
+        200:
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnableState'
+        404:
+          description: Display name not found.
+    put:
+      summary: Set the zebra enable state for a specific display.
+      tags:
+      - Monitoring
+      parameters:
+        - $ref: '#/components/parameters/displayName'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnableState'
+      responses:
+        204:
+          description: Zebra enabled/disabled successfully.
+        400:
+          description: Invalid input.
+        422:
+          description: Unable to process the contained instructions.
+
+  /monitoring/{displayName}/focusAssist:
+    get:
+      summary: Get the focus assist enable state for a specific display.
+      tags:
+      - Monitoring
+      parameters:
+        - $ref: '#/components/parameters/displayName'
+      responses:
+        200:
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnableState'
+        404:
+          description: Display name not found.
+    put:
+      summary: Set the focus assist enable state for a specific display.
+      tags:
+      - Monitoring
+      parameters:
+        - $ref: '#/components/parameters/displayName'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FocusAssistState'
+      responses:
+        204:
+          description: Focus assist settings updated successfully.
+        400:
+          description: Invalid input or configuration.
+        422:
+          description: Unable to process the contained instructions.
+
+  /monitoring/focusAssist:
+    get:
+      summary: Get the focus assist settings.
+      tags:
+      - Monitoring
+      responses:
+        200:
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FocusAssistState'
+        404:
+          description: Display name not found.
+    put:
+      summary: Set the focus assist settings.
+      tags:
+      - Monitoring
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FocusAssistState'
+      responses:
+        204:
+          description: Focus assist settings updated successfully.
+        400:
+          description: Invalid input or configuration.
+        422:
+          description: Unable to process the contained instructions.
+
+  /monitoring/{displayName}/frameGuide:
+    get:
+      summary: Get the frame guide enable state for a specific display.
+      tags:
+      - Monitoring
+      parameters:
+        - $ref: '#/components/parameters/displayName'
+      responses:
+        200:
+          description: Returns the frame guide enable state.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnableState'
+        404:
+          description: Display not found.
+    put:
+      summary: Set the frame guide enable state for a specific display.
+      tags:
+      - Monitoring
+      parameters:
+        - $ref: '#/components/parameters/displayName'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnableState'
+      responses:
+        204:
+          description: Frame guide state updated successfully.
+        422:
+          description: Unable to update the frame guide state.
+
+  /monitoring/frameGuideRatio:
+    get:
+      summary: Get the current frame guide ratio.
+      tags:
+      - Monitoring
+      responses:
+        200:
+          description: Returns the current frame guide ratio.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RatioState'
+    put:
+      summary: Set the frame guide ratio.
+      tags:
+      - Monitoring
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RatioState'
+      responses:
+        204:
+          description: Frame guide ratio updated successfully.
+        422:
+          description: Unable to update the frame guide ratio.
+
+  /monitoring/frameGuideRatio/presets:
+    get:
+      summary: Get the presets for frame guide ratios.
+      tags:
+      - Monitoring
+      responses:
+        200:
+          description: Returns a list of preset frame guide ratios.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  presets:
+                    type: array
+                    items:
+                      type: string
+                      description: A frame guide ratio.
+                    example: ['4:3', '16:9', '2.35:1']
+
+  /monitoring/{displayName}/frameGrids:
+    get:
+      summary: Get the frame grids enable state for a specific display.
+      tags:
+      - Monitoring
+      parameters:
+        - $ref: '#/components/parameters/displayName'
+      responses:
+        200:
+          description: Returns the frame grids enable state.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnableState'
+        404:
+          description: Display not found.
+    put:
+      summary: Set the frame grids enable state for a specific display.
+      tags:
+      - Monitoring
+      parameters:
+        - $ref: '#/components/parameters/displayName'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnableState'
+      responses:
+        204:
+          description: Frame grids state updated successfully.
+        422:
+          description: Unable to update the frame grids state.
+
+  /monitoring/frameGrids:
+    get:
+      summary: Get the global frame grids settings.
+      tags:
+      - Monitoring
+      responses:
+        200:
+          description: Returns the current frame grids settings.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FrameGrids'
+    put:
+      summary: Set the global frame grids settings.
+      tags:
+      - Monitoring
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FrameGrids'
+      responses:
+        204:
+          description: Frame grids settings updated successfully.
+        400:
+          description: Invalid input, check the number of frame grids or values.
+        422:
+          description: Unable to update the frame grids settings.
+
+  /monitoring/{displayName}/safeArea:
+    get:
+      summary: Get the safe area enable state for a specific display.
+      tags:
+      - Monitoring
+      parameters:
+        - $ref: '#/components/parameters/displayName'
+      responses:
+        200:
+          description: Returns the safe area enable state.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnableState'
+        404:
+          description: Display not found.
+    put:
+      summary: Set the safe area enable state for a specific display.
+      tags:
+      - Monitoring
+      parameters:
+        - $ref: '#/components/parameters/displayName'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnableState'
+      responses:
+        204:
+          description: Safe area state updated successfully.
+        422:
+          description: Unable to update the safe area state.
+
+  /monitoring/safeAreaPercent:
+    get:
+      summary: Get the current safe area percentage.
+      tags:
+      - Monitoring
+      responses:
+        200:
+          description: Returns the current safe area percentage.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  percent:
+                    type: integer
+                    description: Safe area coverage percentage.
+                    example: 90
+    put:
+      summary: Set the safe area percentage.
+      tags:
+      - Monitoring
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                percent:
+                  type: integer
+                  description: Safe area coverage percentage to set.
+                  example: 80
+      responses:
+        204:
+          description: Safe area percentage updated successfully.
+        400:
+          description: Invalid percentage value.
+        422:
+          description: Unable to update the safe area percentage.
+
+  /monitoring/{displayName}/falseColor:
+    get:
+      summary: Get the false color enable state for a specific display.
+      tags:
+      - Monitoring
+      parameters:
+        - $ref: '#/components/parameters/displayName'
+      responses:
+        200:
+          description: Returns the false color enable state.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnableState'
+        404:
+          description: Display not found.
+    put:
+      summary: Set the false color enable state for a specific display.
+      tags:
+      - Monitoring
+      parameters:
+        - $ref: '#/components/parameters/displayName'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnableState'
+      responses:
+        204:
+          description: False color state updated successfully.
+        422:
+          description: Unable to update the false color state.
+
+components:
+  parameters:
+    displayName:
+      in: path
+      name: displayName
+      required: true
+      description: Name of the display. Obtainable from /monitoring/display which returns a list of displayNames.
+      schema:
+        type: string
+
+  schemas:
+    EnableState:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+          description: Indicates if the feature is enabled.
+          example: true
+    FocusAssistState:
+      type: object
+      properties:
+        mode:
+          type: string
+          description: Mode of focus assist, e.g., 'Peak' or 'ColoredLines'.
+          enum: ['Peak', 'ColoredLines']
+          example: 'Peak'
+        color:
+          type: string
+          description: Color of the focus assist highlight.
+          enum: ['Red', 'Green', 'Blue', 'White', 'Black']
+          example: 'Red'
+        intensity:
+          type: integer
+          description: Intensity of the focus assist highlight (0-100).
+          example: 75
+    RatioState:
+      type: object
+      properties:
+        ratio:
+          type: string
+          description: The frame guide ratio.
+          example: '4:3'
+    FrameGrids:
+      type: object
+      properties:
+        frameGrids:
+          type: array
+          items:
+            type: string
+            enum: ['Thirds', 'Crosshair', 'Dot', 'Horizon']
+          description: List of frame grids enabled.
+          example: ['Thirds', 'Crosshair']

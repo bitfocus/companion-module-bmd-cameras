@@ -1,0 +1,405 @@
+openapi: 3.0.1
+info:
+  title: Livestream Control API
+  description: API for controlling Livestreams on Blackmagic Design products.
+  version: 1.0.0
+servers:
+  - url: /control/api/v1
+tags:
+- name: Livestream
+  description: Livestream Control API
+paths:
+  /livestreams/0:
+    get:
+      summary: Get the livestream's current status.
+      tags:
+      - Livestream
+      responses:
+        200:
+          description: Livestream's current status.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LivestreamStatus'
+  /livestreams/0/start:
+    get:
+      summary: Determine if the livestream is active.
+      tags:
+      - Livestream
+      responses:
+        200:
+          description: Livestream active status.
+          content:
+            application/json:
+              schema:
+                description: True when the livestream is active.
+                type: boolean
+                example: true
+    put:
+      tags:
+      - Livestream
+      summary: Start the livestream.
+      responses:
+        204:
+          description: Livestream started.
+  /livestreams/0/stop:
+    get:
+      summary: Determine if the livestream is inactive.
+      tags:
+      - Livestream
+      responses:
+        200:
+          description: Livestream inactive status.
+          content:
+            application/json:
+              schema:
+                description: True when the livestream is inactive.
+                type: boolean
+                example: true
+    put:
+      tags:
+      - Livestream
+      summary: Stop the livestream.
+      responses:
+        204:
+          description: Livestream stopped.
+  /livestreams/0/activePlatform:
+    get:
+      summary: Get the currently selected platform configuration for the livestream.
+      tags:
+      - Livestream
+      responses:
+        200:
+          description: Livestream active platform configuration.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActivePlatformConfiguration'
+    put:
+      summary: Set the currently selected platform configuration for the livestream.
+      tags:
+      - Livestream
+      requestBody:
+        description: Update the livestream's active platform configuration.
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ActivePlatformConfiguration'
+      responses:
+        204:
+          description: Livestream active platform configuration updated.
+        400:
+          description: Bad Request
+  /livestreams/platforms:
+    get:
+      summary: Get the list of available platforms.
+      tags:
+      - Livestream
+      responses:
+        200:
+          description: List of available platforms.
+          content:
+            application/json:
+              schema:
+                type: array
+                description: List of available platforms names.
+                items:
+                  type: string
+                  description: Platform name.
+                  example: Facebook
+  /livestreams/platforms/{platformName}:
+    get:
+      summary: Get the service configuration for a platform.
+      tags:
+      - Livestream
+      parameters:
+        - in: path
+          name: platformName
+          description: Name of the platform.
+          required: true
+          example: Facebook
+          schema:
+            type: string
+      responses:
+        200:
+          description: Service configuration for specified platform.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlatformService'
+        400:
+          description: Bad Request
+  /livestreams/customPlatforms:
+    get:
+      summary: Get a list of custom platform files.
+      tags:
+      - Livestream
+      responses:
+        200:
+          description: List of custom platform files.
+          content:
+            application/json:
+              schema:
+                description: List of custom platform file names.
+                type: array
+                items:
+                  type: string
+                  description: Custom platform file name.
+                  example: Custom.xml
+    delete:
+      tags:
+      - Livestream
+      summary: Remove all custom configuration files.
+      responses:
+        204:
+          description: All custom configuration files removed.
+  /livestreams/customPlatforms/{filename}:
+    get:
+      summary: Get a custom platform file.
+      tags:
+      - Livestream
+      parameters:
+        - in: path
+          name: filename
+          description: Name of the file to get.
+          required: true
+          example: Custom.xml
+          schema:
+            type: string
+      responses:
+        200:
+          description: Custom platform file.
+          content:
+            application/xml:
+              schema:
+                $ref: '#/components/schemas/streaming'
+        404:
+          description: Not Found
+    put:
+      summary: Update a custom platform file if it exists, if not, create a new file with the given file name.
+      tags:
+      - Livestream
+      parameters:
+        - in: path
+          name: filename
+          description: Name of the file to update/create.
+          required: true
+          example: Custom.xml
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+            application/xml:
+              schema:
+                $ref: '#/components/schemas/streaming'
+      responses:
+        204:
+          description: Custom platform file created or updated.
+        400:
+          description: Bad Request
+    delete:
+      summary: Remove the given custom platform file.
+      tags:
+      - Livestream
+      parameters:
+        - in: path
+          name: filename
+          description: Name of the file to be removed.
+          required: true
+          example: Custom.xml
+          schema:
+            type: string
+      responses:
+        204:
+          description: Custom platform file removed.
+        404:
+          description: Not Found
+components:
+  schemas:
+    LivestreamStatus:
+      type: object
+      required: [status, bitrate, effectiveVideoFormat]
+      properties:
+        status:
+          type: string
+          enum:
+            - Idle
+            - Connecting
+            - Streaming
+            - Flushing
+            - Interrupted
+          example: Idle
+        bitrate:
+          type: integer
+          description: Current bitrate (bps).
+          example: 123456789
+        effectiveVideoFormat:
+          type: string
+          description: Effective video format for the livestream, serialised as a string.
+          example: 1280x720p30
+        duration:
+          type: integer
+          description: Current stream duration in seconds. Absent if livestream is idle.
+          example: 1234
+        cache:
+          type: integer
+          description: Current stream cache usage percentage.
+          example: 7
+    ActivePlatformConfiguration:
+      type: object
+      description: Livestream's current active platform configuration.
+      required: [platform, server, quality]
+      properties:
+        platform:
+          type: string
+          description: Platform name.
+          example: Youtube SRT (Beta)
+        server:
+          type: string
+          description: The platform's server name, or "Custom" when the URL is customizable.
+          example: Primary
+        key:
+          type: string
+          description: Stream key. Assumed to be empty if missing.
+          example: ABCDEF-GHIJKL-MNOPQR
+        passphrase:
+          type: string
+          description: Passphrase. Only included for SRT streams.
+          example: pp-abcd-efgh-ijkl-mnop
+        quality:
+          type: string
+          description: Quality level name.
+          example: Streaming High
+        url:
+          type: string
+          description: Livestream destination. Only included when URL is customizable.
+          example: rtmp://192.168.0.1/app
+    PlatformService:
+      type: object
+      description: Livestream platform service configuration.
+      required: [platform, servers, profiles]
+      properties:
+        platform:
+          type: string
+          description: Corresponding platform name.
+          example: YouTube 
+        key:
+          type: string
+          description: Default stream key.
+          example: exampleKey123
+        servers:
+          type: array
+          description: List of server configurations.
+          items:
+            $ref: '#/components/schemas/ServerConfiguration'
+        profiles:
+          type: array
+          description: List of profile configurations.
+          items:
+            $ref: '#/components/schemas/ProfileConfiguration'
+        defaultProfile:
+          type: string
+          description: Quality level name.
+          example: Streaming High
+        credentials:
+          type: object
+          required: [username, password]
+          description: Credientials used for RTMP streams.
+          properties:
+            username:
+              type: string
+              description: The username part of the creditials. Only used for RTMP streams.
+              example: myusername
+            password:
+              type: string
+              description: Used for RTMP streams, also used as Passphrase for SRT streams.
+              example: mypassword
+        customizableUrlEnabled:
+          type: boolean
+          description: True when the server URL is customizable.
+          example: false
+    ServerConfiguration:
+      type: object
+      description: Server configuration.
+      required: [server, url]
+      properties:
+        server:
+          type: string
+          description: Server name.
+          example: Primary
+        url:
+          type: string
+          description: Livestream destination.
+          example: srt://a.srt.youtube.com:2010
+        srtExtensions:
+          type: array
+          description: Miscellaneous tags used for SRT livestreams.
+          items:
+            type: object
+            description: Dictionary object mapping SRT tag strings to values.
+            additionalProperties:
+              type: string
+              description: "SRT tag value."
+            example:
+              "copy": "1"
+        group:
+          type: string
+          description: Logical grouping of the server.
+          example: Primary
+    ProfileConfiguration:
+      type: object
+      description: Quality configuration.
+      required: [profile, configs, lowLatency]
+      properties:
+        profile:
+          type: string
+          description: Quality level name.
+          example: Streaming High
+        configs:
+          type: array
+          description: List of video format configurations.
+          items:
+            $ref: '#/components/schemas/ProfileFormatConfiguration'
+        lowLatency:
+          type: boolean
+          description: If true, fewer frames will be buffered in the livestream.
+    ProfileFormatConfiguration:
+      type: object
+      description: Video format configuration for profiles.
+      required: [resolution, fps, bitrate]
+      properties:
+        resolution:
+          type: string
+          description: Video format serialised as a string.
+          example: 1080p
+        fps:
+          type: string
+          description: Frames per second.
+          example: 60
+        bitrate:
+          type: integer
+          description: Pixel bitrate (bps).
+          example: 9000000
+        audioBitrate:
+          type: integer
+          description: Audio bitrate (bps).
+          example: 128000
+        keyFrameInterval:
+          type: integer
+          description: How often a key frame is sent, in seconds.
+          example: 2
+        videoCodecs:
+          type: array
+          description: Supported video encoding algorithm/s.
+          items:
+            type: string
+            description: Video encoding algorithm.
+            enum:
+              - H264
+              - H265
+            example: H264
+    streaming:
+      type: object
+      description: Blackmagic streaming XML file format.

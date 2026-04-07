@@ -1,0 +1,227 @@
+openapi: 3.0.1
+info:
+  title: Media Control API
+  description: API for controlling media devices in Blackmagic Design products.
+  version: 1.0.0
+servers:
+- url: /control/api/v1
+tags:
+- name: Media
+  description: Media Control API
+paths:
+  /media/workingset:
+    get:
+      summary: Get the list of media devices currently in the working set.
+      tags:
+      - Media
+      responses:
+        200:
+          description: The list of media devices in the working set.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Workingset'
+  /media/active:
+    get:
+      summary: Get the currently active media device.
+      tags:
+      - Media
+      responses:
+        200:
+          description: The current active media device.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActiveMedia'
+        204:
+          description: No media is currently active.
+    put:
+      summary: Set the currently active media device.
+      tags:
+      - Media
+      requestBody:
+        description: Set the specified index to be active.
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                workingsetIndex:
+                  type: integer
+                  description: Working set index of the media to make active.
+                  example: 0
+      responses:
+        204:
+          description: The active media device was set successfully.
+        400:
+          description: Setting the currently active media device is not possible in the current state.
+  /media/devices/doformatSupportedFilesystems:
+    get:
+      summary: Get the list of filesystems available to format a media device.
+      tags:
+      - Media
+      responses:
+        200:
+          description: The list of filesystems permitted for formatting.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DoFormatSupportedFilesystems'
+  /media/devices/{deviceName}:
+    get:
+      summary: Get information about a requested device.
+      tags:
+      - Media
+      parameters:
+        - $ref: '#/components/parameters/DeviceNameParameter'
+      responses:
+        200:
+          description: Information about the requested device.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MediaDeviceInformation'
+        400:
+          description: Invalid device name.
+        404:
+          description: Device not found.
+  /media/devices/{deviceName}/doformat:
+    get:
+      summary: Get a format key, used to format the device with a PUT request.
+      tags:
+      - Media
+      parameters:
+        - $ref: '#/components/parameters/DeviceNameParameter'
+      responses:
+        200:
+          description: Format prepared.
+          content:
+            application/json:
+              schema:
+                properties:
+                  deviceName:
+                    type: string
+                    example: sd1
+                    description: Device name of media device to format.
+                  key:
+                    type: string
+                    description: The key required to format this device, provide to PUT /media/devices/{deviceName}/doformat to perform format of media device.
+        400:
+          description: Cannot format the device.
+        404:
+          description: Device not found.
+    put:
+      summary: Perform a format of the specified media device.
+      tags:
+      - Media
+      parameters:
+        - $ref: '#/components/parameters/DeviceNameParameter'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                key:
+                  type: string
+                  description: The key used to format this device, retrieved from prepare format media request GET /media/devices/{deviceName}/doformat. Format key provided cannot be reused after successful format.
+                filesystem:
+                  type: string
+                  example: ExFAT
+                  description: Filesystem to format to. Supported filesystems can be retrieved with GET /media/devices/doFormatSupportedFilesystems.
+                volume:
+                  type: string
+                  description: Volume name to set for the disk after format.
+      responses:
+        204:
+          description: Format successful.
+        400:
+          description: Cannot format the device, invalid filesystem or key.
+        404:
+          description: Device not found.
+components:
+  schemas:
+    Workingset:
+      type: object
+      properties:
+        size:
+          type: integer
+          description: The fixed size of this device's working set.
+          example: 1
+        workingset:
+          type: array
+          description: The device's working set.
+          items:
+            nullable: true
+            type: object
+            description: Device within the working set. null if no device is present within the given working set slot.
+            allOf:
+              - $ref: '#/components/schemas/MediaDevice'
+    MediaDevice:
+      type: object
+      description: Media device.
+      required:
+        - deviceName
+      properties:
+        volume:
+          type: string
+          description: Volume name.
+          example: My disk
+        deviceName:
+          type: string
+          description: Internal device name of this media device.
+          example: sd1
+        remainingRecordTime:
+          type: integer
+          description: Remaining record time using current codec and video format in seconds.
+          example: 5124087
+        totalSpace:
+          type: integer
+          description: Total space on media device in bytes.
+          example: 9817071702016
+        remainingSpace:
+          type: integer
+          description: Remaining space on media device in bytes.
+          example: 7817071702016
+        clipCount:
+          type: integer
+          description: Number of clips currently on the device.
+          example: 12
+    ActiveMedia:
+      type: object
+      description: The active media device, or null if there is no active media.
+      nullable: true
+      properties:
+        workingsetIndex:
+          type: integer
+          description: Working set index of the active media device.
+          example: 0
+        deviceName:
+          type: string
+          description: Device name of media device.
+          example: sd1
+    DoFormatSupportedFilesystems:
+      description: List of filesystems permitted for formatting media.
+      type: array
+      example: [ExFAT, HFS]
+      items:
+        description: Filesystem serialised as string.
+        example: ExFAT
+        type: string
+    MediaDeviceInformation:
+      type: object
+      description: Media device state.
+      properties:
+        state:
+          type: string
+          example: Mounted
+          enum: [None, Scanning, Mounted, Uninitialised, Formatting, RaidComponent]
+          description: The current state of the media device.
+  parameters:
+    DeviceNameParameter:
+      in: path
+      name: deviceName
+      schema:
+        type: string
+        example: sd1
+      required: true
+      description: Device name of the media device. Retrieved by "deviceName" member of GET /media/workingset or GET /media/active.
