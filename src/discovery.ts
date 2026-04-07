@@ -341,10 +341,10 @@ export async function probeAndFetchState(
 				signal: controller.signal,
 			})
 
-			if (response.status === 501) {
+			if (response.status === 501 || response.status === 404) {
 				ep.unsupported = true
 				unsupported++
-				log('debug', `Endpoint ${ep.path} returned 501 (not implemented)`)
+				log('debug', `Endpoint ${ep.path} returned ${response.status}`)
 				return
 			}
 

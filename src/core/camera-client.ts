@@ -176,7 +176,14 @@ export class CameraClient {
 		}
 
 		ws.onerror = (err: unknown) => {
-			this.onLog('warn', `WebSocket error: ${err instanceof Error ? err.message : String(err)}`)
+			// ErrorEvent objects don't stringify well — extract the message if available
+			const msg =
+				err instanceof Error
+					? err.message
+					: typeof err === 'object' && err !== null && 'message' in err
+						? String((err as { message: unknown }).message)
+						: 'unknown error'
+			this.onLog('debug', `WebSocket error event: ${msg}`)
 		}
 	}
 
