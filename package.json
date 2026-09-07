@@ -4,6 +4,7 @@
 	"main": "dist/main.js",
 	"type": "module",
 	"scripts": {
+		"test": "npm run build:main && node --test test/*.test.js",
 		"postinstall": "husky",
 		"format": "prettier -w .",
 		"package": "npm run build && companion-module-build",

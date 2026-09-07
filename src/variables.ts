@@ -19,9 +19,10 @@ function buildVariableId(prefix: string, key: string): string {
 	if (lowerPrefix.endsWith(`_${lowerKey}`) || lowerPrefix === lowerKey) {
 		return prefix
 	}
-	// Also handle the last segment matching: "transports_0_record" + "recording" → skip since "record" ≈ "recording"
+	// Preserve the historical record/recording alias, but do not collapse distinct
+	// properties such as "shutter", "shutterSpeed", and "shutterAngle".
 	const lastSegment = lowerPrefix.split('_').pop() ?? ''
-	if (lastSegment.length >= 3 && lowerKey.startsWith(lastSegment)) {
+	if (lastSegment === 'record' && lowerKey === 'recording') {
 		return prefix
 	}
 	return `${prefix}_${key}`
