@@ -124,7 +124,7 @@ function schemaPropertyToField(
 	}
 }
 
-function buildFieldsFromSchema(
+export function buildFieldsFromSchema(
 	schema: ParsedSchema | undefined,
 	overrides?: Record<string, { inputType?: string; label?: string }>,
 	dynamicChoices?: Record<string, { id: string; label: string }[]>,
@@ -156,6 +156,17 @@ function buildFieldsFromSchema(
 			})
 		} else {
 			fields.push(schemaPropertyToField(fieldId, prop, overrides?.[fieldId]))
+		}
+
+		if (prop.type === 'number' || prop.type === 'integer') {
+			fields.push({
+				id: `${fieldId}__variable`,
+				type: 'textinput',
+				label: `${overrides?.[fieldId]?.label ?? prop.description ?? key} (variable)`,
+				default: '',
+				useVariables: true,
+				description: 'Optional. When set, this value overrides the numeric field above.',
+			})
 		}
 	}
 	return fields
@@ -194,7 +205,7 @@ function collectSchemaLeaves(schema: ParsedSchema, prefix?: string): { fieldId: 
 // booleans already booleans). buildSingleFieldAction coerces from a raw textinput string
 // where 'true'/'1' must be parsed. The semantics are different enough that a shared
 // helper would add coupling without clarity.
-function buildBodyFromOptions(
+export function buildBodyFromOptions(
 	schema: ParsedSchema | undefined,
 	options: Record<string, unknown>,
 ): Record<string, unknown> | undefined {
@@ -203,13 +214,21 @@ function buildBodyFromOptions(
 	let hasValue = false
 
 	for (const { fieldId, prop } of collectSchemaLeaves(schema)) {
-		const value = options[fieldId]
+		const variableValue = options[`${fieldId}__variable`]
+		const value = variableValue !== undefined && variableValue !== '' ? variableValue : options[fieldId]
 		if (value === undefined || value === '') continue
 
 		let coerced: unknown
 		if (prop.type === 'number' || prop.type === 'integer') {
 			const num = Number(value)
-			if (Number.isNaN(num)) continue
+			if (!Number.isFinite(num)) throw new Error(`${fieldId} must resolve to a number`)
+			if (prop.type === 'integer' && !Number.isInteger(num)) throw new Error(`${fieldId} must resolve to an integer`)
+			if (prop.minimum !== undefined && num < prop.minimum) {
+				throw new Error(`${fieldId} must be at least ${prop.minimum}`)
+			}
+			if (prop.maximum !== undefined && num > prop.maximum) {
+				throw new Error(`${fieldId} must be at most ${prop.maximum}`)
+			}
 			coerced = num
 		} else if (prop.type === 'boolean') {
 			coerced = Boolean(value)
