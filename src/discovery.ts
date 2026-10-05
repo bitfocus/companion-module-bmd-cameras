@@ -1,6 +1,7 @@
 import { parse as parseYaml } from 'yaml'
 import { API_BASE_PATH, DOCUMENTATION_PATH } from './constants.js'
 import type { ModuleConfig } from './config.js'
+import { cameraFetch } from './transport.js'
 import {
 	errorMessage,
 	type DiscoveredEndpoint,
@@ -52,11 +53,11 @@ function getBaseUrl(config: ModuleConfig): string {
 	return `${protocol}://${config.host}:${config.port}`
 }
 
-async function fetchText(url: string, timeoutMs: number): Promise<string> {
+async function fetchText(config: ModuleConfig, url: string): Promise<string> {
 	const controller = new AbortController()
-	const timeout = setTimeout(() => controller.abort(), timeoutMs)
+	const timeout = setTimeout(() => controller.abort(), config.requestTimeoutMs)
 	try {
-		const response = await fetch(url, { signal: controller.signal })
+		const response = await cameraFetch(config, url, { signal: controller.signal })
 		if (!response.ok) throw new Error(`HTTP ${response.status}`)
 		return await response.text()
 	} finally {
@@ -68,7 +69,7 @@ function parseDocumentationHtml(html: string): { openApiYamls: string[]; asyncAp
 	const openApiYamls: string[] = []
 	const asyncApiYamls: string[] = []
 
-	const asyncApiSectionIndex = html.indexOf('asyncAPI')
+	const asyncApiSectionIndex = html.search(/asyncapi/i)
 	const openApiSection = asyncApiSectionIndex >= 0 ? html.slice(0, asyncApiSectionIndex) : html
 	const asyncApiSection = asyncApiSectionIndex >= 0 ? html.slice(asyncApiSectionIndex) : ''
 
@@ -89,6 +90,10 @@ function resolveRef(ref: string, components: Record<string, OpenApiSchemaObject>
 	if (!ref.startsWith('#/components/schemas/') || !components) return {}
 	const name = ref.slice('#/components/schemas/'.length)
 	return components[name] ?? {}
+}
+
+function resolveDocumentationUrl(baseUrl: string, yamlPath: string): string {
+	return new URL(yamlPath, `${baseUrl}/control/`).toString()
 }
 
 function resolveSchema(
@@ -246,7 +251,7 @@ export async function discoverCamera(config: ModuleConfig, log: LogFn): Promise<
 	const docUrl = `${baseUrl}${DOCUMENTATION_PATH}`
 
 	log('info', `Fetching camera documentation from ${docUrl}`)
-	const html = await fetchText(docUrl, config.requestTimeoutMs)
+	const html = await fetchText(config, docUrl)
 	const { openApiYamls, asyncApiYamls } = parseDocumentationHtml(html)
 
 	log('info', `Found ${openApiYamls.length} OpenAPI specs and ${asyncApiYamls.length} AsyncAPI specs`)
@@ -256,9 +261,9 @@ export async function discoverCamera(config: ModuleConfig, log: LogFn): Promise<
 
 	const openApiResults = await Promise.allSettled(
 		openApiYamls.map(async (yamlPath: string) => {
-			const url = `${baseUrl}/control/${yamlPath}`
+			const url = resolveDocumentationUrl(baseUrl, yamlPath)
 			yamlFiles.push(yamlPath)
-			const text = await fetchText(url, config.requestTimeoutMs)
+			const text = await fetchText(config, url)
 			return parseOpenApiSpec(text)
 		}),
 	)
@@ -276,8 +281,8 @@ export async function discoverCamera(config: ModuleConfig, log: LogFn): Promise<
 	let wsPath: string | undefined
 	for (const yamlPath of asyncApiYamls) {
 		try {
-			const url = `${baseUrl}/control/${yamlPath}`
-			const text = await fetchText(url, config.requestTimeoutMs)
+			const url = resolveDocumentationUrl(baseUrl, yamlPath)
+			const text = await fetchText(config, url)
 			wsPath = parseAsyncApiSpec(text)
 			if (wsPath) {
 				log('info', `WebSocket path from AsyncAPI: ${wsPath}`)
@@ -342,7 +347,7 @@ export async function probeAndFetchState(
 		const controller = new AbortController()
 		const timeout = setTimeout(() => controller.abort(), config.requestTimeoutMs)
 		try {
-			const response = await fetch(url, {
+			const response = await cameraFetch(config, url, {
 				method: 'GET',
 				headers: { Accept: 'application/json' },
 				signal: controller.signal,

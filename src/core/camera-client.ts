@@ -1,20 +1,8 @@
 import { API_BASE_PATH } from '../constants.js'
 import type { ModuleConfig } from '../config.js'
+import { cameraFetch, cameraWebSocket } from '../transport.js'
+import type { CameraWebSocket } from '../transport.js'
 import { errorMessage, type HttpMethod } from '../types.js'
-
-// Minimal WebSocket interface matching the DOM WebSocket API.
-// Named RawWs (not WebSocketLike) to avoid confusion with Node's ws library —
-// we use the global browser-style WebSocket, not a Node EventEmitter.
-type RawWs = {
-	send: (data: string) => void
-	close: () => void
-	onopen: (() => void) | null
-	onclose: (() => void) | null
-	onerror: ((err: unknown) => void) | null
-	onmessage: ((event: { data: string }) => void) | null
-}
-
-type WsCtor = new (url: string) => RawWs
 
 export interface CameraClientOptions {
 	config: ModuleConfig
@@ -26,7 +14,7 @@ export class CameraClient {
 	private config: ModuleConfig
 	private readonly onState: CameraClientOptions['onState']
 	private readonly onLog: CameraClientOptions['onLog']
-	private ws: RawWs | undefined
+	private ws: CameraWebSocket | undefined
 	private wsConnected = false
 	private pollTimer: NodeJS.Timeout | undefined
 	private reconnectTimer: NodeJS.Timeout | undefined
@@ -90,16 +78,15 @@ export class CameraClient {
 	private async connectWebSocket(): Promise<void> {
 		if (!this.wsPath) return
 
-		const WebSocketCtor = (globalThis as unknown as { WebSocket?: WsCtor }).WebSocket
-		if (!WebSocketCtor) {
-			this.onLog('warn', 'Global WebSocket implementation unavailable, using polling only')
-			return
-		}
-
 		const url = `${this.wsProtocol()}://${this.config.host}:${this.config.port}${this.wsPath}`
 		try {
 			await new Promise<void>((resolve: () => void, reject: (err: Error) => void) => {
-				const ws = new WebSocketCtor(url)
+				const ws = cameraWebSocket(this.config, url)
+				if (!ws) {
+					this.onLog('warn', 'Global WebSocket implementation unavailable, using polling only')
+					resolve()
+					return
+				}
 				let settled = false
 				const timeout = setTimeout(() => {
 					if (!settled) {
@@ -136,7 +123,7 @@ export class CameraClient {
 		}
 	}
 
-	private attachWsHandlers(ws: RawWs): void {
+	private attachWsHandlers(ws: CameraWebSocket): void {
 		ws.onmessage = (message: { data: string }) => {
 			try {
 				const data = JSON.parse(message.data)
@@ -257,7 +244,7 @@ export class CameraClient {
 		const timeout = setTimeout(() => controller.abort(), this.config.requestTimeoutMs)
 		try {
 			const url = new URL(`${this.getBaseUrl()}${path}`)
-			const response = await fetch(url, {
+			const response = await cameraFetch(this.config, url, {
 				method,
 				headers: {
 					Accept: 'application/json',

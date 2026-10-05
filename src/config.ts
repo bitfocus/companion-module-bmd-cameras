@@ -13,6 +13,7 @@ export interface ModuleConfig {
 	host: string
 	port: number
 	useHttps: boolean
+	allowInsecureHttps: boolean
 	fetchMode: FetchMode
 	endpointHandling: EndpointHandling
 	pollIntervalMs: number
@@ -41,6 +42,14 @@ export function GetConfigFields(): SomeCompanionConfigField[] {
 			type: 'checkbox',
 			id: 'useHttps',
 			label: 'Use HTTPS',
+			width: 4,
+			default: false,
+		},
+		{
+			type: 'checkbox',
+			id: 'allowInsecureHttps',
+			label: 'Allow insecure HTTPS',
+			tooltip: 'Requires Use HTTPS. Disable TLS certificate verification only for trusted cameras.',
 			width: 4,
 			default: false,
 		},
@@ -94,6 +103,7 @@ export function NormalizeConfig(config: ModuleConfig): ModuleConfig {
 		host: String(config.host || '').trim(),
 		port: Number.isFinite(config.port) && config.port > 0 ? Math.trunc(config.port) : fallbackPort,
 		useHttps,
+		allowInsecureHttps: Boolean(config.allowInsecureHttps),
 		fetchMode: config.fetchMode === 'lazy' ? 'lazy' : 'eager',
 		endpointHandling: config.endpointHandling === 'show' ? 'show' : 'probe',
 		pollIntervalMs:

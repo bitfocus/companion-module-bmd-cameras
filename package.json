@@ -9,6 +9,7 @@
 		"package": "npm run build && companion-module-build",
 		"build": "rimraf dist && npm run build:main",
 		"build:main": "tsc -p tsconfig.build.json",
+		"test": "npm run build && node --test test/*.test.js",
 		"dev": "tsc -p tsconfig.build.json --watch",
 		"lint:raw": "eslint",
 		"lint": "npm run lint:raw -- ."
@@ -24,6 +25,7 @@
 	},
 	"dependencies": {
 		"@companion-module/base": "~1.14.1",
+		"undici": "^8.8.0",
 		"yaml": "^2.8.3"
 	},
 	"devDependencies": {
